@@ -1,0 +1,24 @@
+node_modules/
+dist/
+dist-test/
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+web-portal/dist/
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+[Uu]serSettings/
+*.csproj
+*.sln
+*.unityproj
+*.suo

@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 124239816a3f38645b94624b5ab05389, type: 3}
+  m_Name: VeraDef
+  m_EditorClassIdentifier: QuizBattle.Runtime::QuizBattle.Characters.CharacterDefinitionSO
+  characterId: vera
+  displayName: Vera
+  placeholderColor: {r: 0.7, g: 0.3, b: 0.9, a: 1}
+  archetype: 4
+  accentColor: {r: 0.9, g: 0.6, b: 1, a: 1}
+  emissionColor: {r: 0.85, g: 0.35, b: 1, a: 1}
+  maxHp: 55
+  moveRange: 1
+  abilityId: life_drain
+  abilityName: Life Drain
+  abilityType: 0
+  abilityDescription: Melee/short-range attack that heals Vera for 50% of damage
+    dealt.
+  targeting: 1
+  range: 1
+  baseDamage: 16
+  dotDamage: 0
+  dotRounds: 0
+  damageReductionPct: 0
+  bonusMoveSteps: 0
+  lifestealPct: 50
+  vfxTag: vfx_life_drain
+  defaultUnlocked: 0
+  xpThreshold: 600

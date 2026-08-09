@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/Boot.unity
+    guid: 14edae18f3e05774eba96b56b9c333b5
+  - enabled: 1
+    path: Assets/Scenes/NameEntry.unity
+    guid: bb2c00556a7dd7d43afbce7c9bf94b24
+  - enabled: 1
+    path: Assets/Scenes/Connect.unity
+    guid: 8ab493fb55eec9d4d9c987f86856900f
+  - enabled: 1
+    path: Assets/Scenes/CharacterSelect.unity
+    guid: 766bb4306500ec14b99accf94f91cac7
+  - enabled: 1
+    path: Assets/Scenes/Lobby.unity
+    guid: 3fd2364827dbb014684dfc3e05172f8e
+  - enabled: 1
+    path: Assets/Scenes/Arena.unity
+    guid: bcc3f705ad3959c4dbebea4cb5957d03
+  - enabled: 1
+    path: Assets/Scenes/TeacherMode.unity
+    guid: 98f5f3445d2a46542947647612b80ad3
+  - enabled: 1
+    path: Assets/Scenes/PostMatch.unity
+    guid: 0d56352ec304fe14683b5207aa3cd6d5
+  m_configObjects: {}
