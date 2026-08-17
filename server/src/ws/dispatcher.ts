@@ -5,6 +5,7 @@ import { handleJoinLobby, handlePlayerReady, handleSelectCharacter, handleSelect
 import { handleAnswer } from "./handlers/questionHandler";
 import { handleRewardConsumed } from "./handlers/rewardHandler";
 import { handleAttack } from "./handlers/attackHandler";
+import { handleFreeze } from "./handlers/freezeHandler";
 import { handleTeacherJoinMatch } from "./handlers/teacherSpectatorHandler";
 
 type Handler = (conn: ClientConnection, msg: Envelope) => void;
@@ -19,6 +20,7 @@ const handlers: Record<string, Handler> = {
   submit_answer: handleAnswer,
   reward_consumed: handleRewardConsumed,
   use_attack: handleAttack,
+  use_freeze: handleFreeze,
   teacher_join_match: handleTeacherJoinMatch,
 };
 

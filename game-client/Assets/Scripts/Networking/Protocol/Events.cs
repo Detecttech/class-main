@@ -86,7 +86,7 @@ namespace QuizBattle.Networking.Protocol
     public class RewardOfferedPayload
     {
         [JsonProperty("rewardId")] public string RewardId;
-        [JsonProperty("type")] public string Type; // "attack_choice" | "bonus_move"
+        [JsonProperty("type")] public string Type; // "attack_choice" | "freeze" | "bonus_move"
     }
 
     public class AnswerResultPayload
@@ -111,6 +111,7 @@ namespace QuizBattle.Networking.Protocol
         [JsonProperty("alive")] public bool Alive;
         [JsonProperty("streak")] public int Streak;
         [JsonProperty("goalReached")] public bool GoalReached;
+        [JsonProperty("frozen")] public bool Frozen;
     }
 
     public class AttackResultPayload
@@ -126,6 +127,14 @@ namespace QuizBattle.Networking.Protocol
     public class PlayerEliminatedPayload
     {
         [JsonProperty("playerId")] public int PlayerId;
+    }
+
+    /// Broadcast whenever a freeze reward is used — everyone (including the target) sees
+    /// who cast it and who it landed on, mirroring how attack_result works for attacks.
+    public class FreezeResultPayload
+    {
+        [JsonProperty("casterId")] public int CasterId;
+        [JsonProperty("targetId")] public int TargetId;
     }
 
     public class StandingEntry

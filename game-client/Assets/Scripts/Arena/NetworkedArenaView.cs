@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using QuizBattle.Arena.Vfx;
+using QuizBattle.Arena.Visuals;
 using QuizBattle.Characters;
 using QuizBattle.GameState;
 using QuizBattle.Networking.Protocol;
@@ -34,6 +35,7 @@ namespace QuizBattle.Arena
             store.QuestionPushed += OnQuestionPushed;
             store.PlayerAdvanced += OnPlayerAdvanced;
             store.AttackResolved += OnAttackResolved;
+            store.FreezeResolved += OnFreezeResolved;
             store.PlayerEliminated += OnPlayerEliminated;
             store.MatchEnded += OnMatchEnded;
             store.ServerError += e => _hud.Log($"[error] {e.Code}: {e.Message}");
@@ -46,6 +48,16 @@ namespace QuizBattle.Arena
             if (store.Players.Count > 0)
             {
                 BuildArenaFromCurrentState();
+            }
+
+            // The server pushes match_start immediately followed by each player's first
+            // question, both synchronously — so the first question_push very often also
+            // arrives (and gets consumed into store.CurrentQuestion) before this view
+            // finishes subscribing, same race as above. Without this the HUD's question
+            // panel just stays blank until the *second* question happens to arrive.
+            if (store.CurrentQuestion != null)
+            {
+                OnQuestionPushed(store.CurrentQuestion);
             }
         }
 
@@ -86,8 +98,18 @@ namespace QuizBattle.Arena
 
             token.MoveTo(_grid.TileToWorldPos(a.NewGridPos.X, a.NewGridPos.Y));
             token.SetHp(a.Hp, a.MaxHp);
-            if (a.Streak >= 2) token.SetStreak(a.Streak);
+            if (a.Streak >= 2)
+            {
+                token.SetStreak(a.Streak);
+                FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, $"STREAK x{a.Streak}!", QuizBattlePalette.FireGlow, 1.15f);
+            }
+            else
+            {
+                FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, "CORRECT!", QuizBattlePalette.GoldTrim, 1.0f);
+            }
+
             if (!a.Alive) token.SetEliminated();
+            token.SetFrozen(a.Frozen);
         }
 
         private void OnAttackResolved(AttackResultPayload a)
@@ -100,9 +122,22 @@ namespace QuizBattle.Arena
                 AbilityVfxPlayer.Play(a.VfxTag, from, token.transform.position, a.Eliminated);
 
                 token.SetHp(a.TargetHpAfter, _store.Players.TryGetValue(a.TargetId, out var p) ? p.maxHp : a.TargetHpAfter);
+                FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, $"-{a.Damage} HP", QuizBattlePalette.RoofTilesRed, 1.25f);
                 if (a.Eliminated) token.SetEliminated();
             }
             _hud.Log($"Player {a.AttackerId} attacks player {a.TargetId} for {a.Damage} dmg!");
+        }
+
+        private void OnFreezeResolved(FreezeResultPayload f)
+        {
+            if (_tokens.TryGetValue(f.TargetId, out var token))
+            {
+                Vector3 from = _tokens.TryGetValue(f.CasterId, out var casterToken) ? casterToken.transform.position : token.transform.position;
+                AbilityVfxPlayer.Play("vfx_freeze", from, token.transform.position, eliminated: false);
+                token.SetFrozen(true);
+                FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, "FROZEN!", QuizBattlePalette.WaterBlue, 1.15f);
+            }
+            _hud.Log($"Player {f.CasterId} freezes player {f.TargetId}!");
         }
 
         private void OnPlayerEliminated(int playerId)

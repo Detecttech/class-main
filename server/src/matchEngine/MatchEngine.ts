@@ -9,8 +9,13 @@ import { getCharacter } from "./characters/characterConfig";
 import { rollReward, expireStaleRewards, consumeReward } from "./RewardResolver";
 import { attackFor, resolveAttack, tickDot, type AttackOutcome } from "./CombatResolver";
 
-export function createMatch(matchId: number, mode: "ffa" | "teams", maxRounds = 20): MatchState {
-  return createMatchState(matchId, mode, maxRounds);
+export function createMatch(
+  matchId: number,
+  mode: "ffa" | "teams",
+  maxRounds = 20,
+  gridHeight?: number
+): MatchState {
+  return createMatchState(matchId, mode, maxRounds, gridHeight);
 }
 
 export function addPlayer(
@@ -40,6 +45,8 @@ export function addPlayer(
     questionsAnswered: 0,
     currentQuestion: null,
     goalReached: false,
+    frozen: false,
+    lastTargetedPlayerId: null,
   };
   state.players.set(playerId, player);
   return player;
@@ -106,9 +113,14 @@ export function submitAnswer(
   expireStaleRewards([player], player.questionsAnswered);
 
   // A correct answer is what drives you toward the goal — this replaces the
-  // old movement-budget/direction system entirely.
+  // old movement-budget/direction system entirely. A frozen player still
+  // answers/builds streak normally; only this one advance is consumed/skipped.
   if (correct) {
-    advancePlayer(player, state.grid.height, 1);
+    if (player.frozen) {
+      player.frozen = false;
+    } else {
+      advancePlayer(player, state.grid.height, 1);
+    }
   }
 
   const dotDamage = tickDot(player);
@@ -140,6 +152,13 @@ export function timeoutAnswer(state: MatchState, playerId: number): SubmitAnswer
   player.currentQuestion = null;
   player.questionsAnswered += 1;
   player.consecutiveCorrect = 0;
+
+  // A reward the player never acted on (missed/ignored the popup) must not linger —
+  // submitAnswer's `!player.pendingReward` gate would otherwise silently block every
+  // future streak reward until natural expiry, several questions later.
+  if (player.pendingReward) {
+    consumeReward(player, player.pendingReward.rewardId);
+  }
   expireStaleRewards([player], player.questionsAnswered);
 
   const dotDamage = tickDot(player);
@@ -160,6 +179,30 @@ export function timeoutAnswer(state: MatchState, playerId: number): SubmitAnswer
   };
 }
 
+/** Every living player attacker could legally target (alive, not self, not a
+ * teammate) other than excludeId — used both to enforce "can't target the
+ * same player twice in a row" and to waive that rule when there's genuinely
+ * no one else to pick (e.g. a 2-player match), rather than soft-locking the
+ * reward entirely. */
+function hasAlternativeTarget(state: MatchState, attacker: PlayerState, excludeId: number): boolean {
+  for (const p of state.players.values()) {
+    if (!p.alive || p.playerId === attacker.playerId || p.playerId === excludeId) continue;
+    if (state.mode === "teams" && attacker.team && attacker.team === p.team) continue;
+    return true;
+  }
+  return false;
+}
+
+function validateTarget(state: MatchState, attacker: PlayerState, target: PlayerState | undefined): string | null {
+  if (!target || !target.alive) return "invalid_target";
+  if (attacker.playerId === target.playerId) return "cannot_target_self";
+  if (state.mode === "teams" && attacker.team && attacker.team === target.team) return "friendly_fire_blocked";
+  if (attacker.lastTargetedPlayerId === target.playerId && hasAlternativeTarget(state, attacker, target.playerId)) {
+    return "repeat_target_blocked";
+  }
+  return null;
+}
+
 export interface UseAttackResult {
   ok: boolean;
   error?: string;
@@ -171,26 +214,50 @@ export function useAttack(state: MatchState, playerId: number, rewardId: string,
   const attacker = state.players.get(playerId);
   const target = state.players.get(targetId);
   if (!attacker || !attacker.alive) return { ok: false, error: "not_in_match" };
-  if (!target || !target.alive) return { ok: false, error: "invalid_target" };
-  if (attacker.playerId === target.playerId) return { ok: false, error: "cannot_target_self" };
-  if (state.mode === "teams" && attacker.team && attacker.team === target.team) {
-    return { ok: false, error: "friendly_fire_blocked" };
-  }
+  const targetError = validateTarget(state, attacker, target);
+  if (targetError) return { ok: false, error: targetError };
   if (!attacker.pendingReward || attacker.pendingReward.rewardId !== rewardId || attacker.pendingReward.type !== "attack_choice") {
     return { ok: false, error: "no_such_reward" };
   }
 
   const consumed = consumeReward(attacker, rewardId);
   if (!consumed.ok) return { ok: false, error: consumed.error };
+  attacker.lastTargetedPlayerId = targetId;
 
   const ability = attackFor(attacker.characterId);
-  const outcome = resolveAttack(attacker, target, ability);
+  const outcome = resolveAttack(attacker, target!, ability);
 
   const result = checkWinCondition(state);
   state.result = result;
   if (result) state.status = "completed";
 
   return { ok: true, outcome, result };
+}
+
+export interface UseFreezeResult {
+  ok: boolean;
+  error?: string;
+}
+
+/** Freezes the target: their next correct answer won't advance them. Doesn't
+ * touch HP/position itself, so — unlike attack/bonus_move — it can never
+ * itself produce a match result. */
+export function useFreeze(state: MatchState, playerId: number, rewardId: string, targetId: number): UseFreezeResult {
+  const attacker = state.players.get(playerId);
+  const target = state.players.get(targetId);
+  if (!attacker || !attacker.alive) return { ok: false, error: "not_in_match" };
+  const targetError = validateTarget(state, attacker, target);
+  if (targetError) return { ok: false, error: targetError };
+  if (!attacker.pendingReward || attacker.pendingReward.rewardId !== rewardId || attacker.pendingReward.type !== "freeze") {
+    return { ok: false, error: "no_such_reward" };
+  }
+
+  const consumed = consumeReward(attacker, rewardId);
+  if (!consumed.ok) return { ok: false, error: consumed.error };
+  attacker.lastTargetedPlayerId = targetId;
+
+  target!.frozen = true;
+  return { ok: true };
 }
 
 export interface ConsumeBonusMoveResult {
@@ -222,6 +289,25 @@ export function consumeBonusMove(state: MatchState, playerId: number, rewardId: 
   if (result) state.status = "completed";
 
   return { ok: true, newPos: player.pos, goalReached: player.goalReached, result };
+}
+
+export interface WaiveRewardResult {
+  ok: boolean;
+  error?: string;
+}
+
+/** Clears a pending reward with no other side effect — used when the client can't
+ * act on it (e.g. an attack_choice/freeze offered with no living opponent left to
+ * target). Without this, an un-consumable reward stays pending and blocks every
+ * future reward roll (see submitAnswer's `!player.pendingReward` gate) until it
+ * naturally expires several questions later. */
+export function waiveReward(state: MatchState, playerId: number, rewardId: string): WaiveRewardResult {
+  const player = state.players.get(playerId);
+  if (!player) return { ok: false, error: "not_in_match" };
+  if (!player.pendingReward || player.pendingReward.rewardId !== rewardId) {
+    return { ok: false, error: "no_such_reward" };
+  }
+  return consumeReward(player, rewardId);
 }
 
 function livingGroups(state: MatchState): Map<string | number, PlayerState[]> {

@@ -8,4 +8,7 @@ export const config = {
   dbPath: process.env.DB_PATH ?? path.join(__dirname, "..", "data", "quizbattle.db"),
   serverName: process.env.SERVER_NAME ?? "Classroom QuizBattle",
   webPortalDist: path.join(__dirname, "..", "web-portal", "dist"),
+  // Served at /play (not /) so it doesn't collide with the teacher web-portal, which
+  // owns the root of this same origin — see http/app.ts.
+  webGLBuildDist: path.join(__dirname, "..", "..", "game-client", "webgl-build"),
 };

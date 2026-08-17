@@ -28,6 +28,17 @@ export function createHttpApp() {
     studentRoutes
   );
 
+  // Mounted before the web-portal's catch-all below, at its own /play prefix so the
+  // two static builds (teacher dashboard at /, game client at /play) don't collide on
+  // the same origin — same-origin means the WebGL build's fetch/WebSocket calls back to
+  // this server need no CORS configuration at all.
+  if (fs.existsSync(config.webGLBuildDist)) {
+    app.use("/play", express.static(config.webGLBuildDist));
+    app.get("/play", (_req, res) => {
+      res.sendFile(path.join(config.webGLBuildDist, "index.html"));
+    });
+  }
+
   if (fs.existsSync(config.webPortalDist)) {
     app.use(express.static(config.webPortalDist));
     app.get("*", (_req, res) => {

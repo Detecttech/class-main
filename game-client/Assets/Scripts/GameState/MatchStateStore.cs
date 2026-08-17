@@ -19,6 +19,7 @@ namespace QuizBattle.GameState
         public bool alive = true;
         public int streak;
         public bool goalReached;
+        public bool frozen;
     }
 
     public class ClientLobbyPlayer
@@ -57,6 +58,7 @@ namespace QuizBattle.GameState
         public event Action<AnswerResultPayload> AnswerResultReceived;
         public event Action<PlayerAdvancedPayload> PlayerAdvanced;
         public event Action<AttackResultPayload> AttackResolved;
+        public event Action<FreezeResultPayload> FreezeResolved;
         public event Action<int> PlayerEliminated;
         public event Action<MatchEndPayload> MatchEnded;
         public event Action<XpAwardPayload> XpAwarded;
@@ -101,6 +103,9 @@ namespace QuizBattle.GameState
                     break;
                 case "attack_result":
                     HandleAttackResult(payload.ToObject<AttackResultPayload>());
+                    break;
+                case "freeze_result":
+                    HandleFreezeResult(payload.ToObject<FreezeResultPayload>());
                     break;
                 case "player_eliminated":
                     HandlePlayerEliminated(payload.ToObject<PlayerEliminatedPayload>());
@@ -175,6 +180,7 @@ namespace QuizBattle.GameState
                 p.alive = advanced.Alive;
                 p.streak = advanced.Streak;
                 p.goalReached = advanced.GoalReached;
+                p.frozen = advanced.Frozen;
             }
             PlayerAdvanced?.Invoke(advanced);
         }
@@ -187,6 +193,14 @@ namespace QuizBattle.GameState
                 target.alive = !attack.Eliminated;
             }
             AttackResolved?.Invoke(attack);
+        }
+
+        private void HandleFreezeResult(FreezeResultPayload freeze)
+        {
+            // Optimistic — the authoritative frozen flag rides along on the target's next
+            // player_advanced (once it's actually consumed/cleared server-side).
+            if (Players.TryGetValue(freeze.TargetId, out var target)) target.frozen = true;
+            FreezeResolved?.Invoke(freeze);
         }
 
         private void HandlePlayerEliminated(PlayerEliminatedPayload elim)

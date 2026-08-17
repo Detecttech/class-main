@@ -1,4 +1,5 @@
 using System.Linq;
+using QuizBattle.Arena;
 using QuizBattle.Bootstrap;
 using QuizBattle.Characters;
 using UnityEngine;
@@ -24,7 +25,7 @@ namespace QuizBattle.UI
             var xp = AppRoot.Instance.Store.LastXpAward;
             if (xp != null)
             {
-                var xpPanel = UiFactory.CreatePanel(canvas.transform, "XpPanel", new Vector2(0.5f, 0.55f), new Vector2(420, 130), new Color(0.15f, 0.15f, 0.25f, 0.9f));
+                var xpPanel = UiFactory.CreatePanel(canvas.transform, "XpPanel", new Vector2(0.5f, 0.55f), new Vector2(420, 130), new Color(QuizBattlePalette.PanelDeep.r, QuizBattlePalette.PanelDeep.g, QuizBattlePalette.PanelDeep.b, 0.9f));
                 var xpText = UiFactory.CreateText(xpPanel.transform, "XpText", new Vector2(0.5f, 0.5f), new Vector2(400, 110), 20);
                 xpText.text = $"+{xp.XpGained} XP\nTotal: {xp.NewTotalXp} XP";
 
@@ -35,7 +36,7 @@ namespace QuizBattle.UI
                         .Select(id => defs.FirstOrDefault(d => d.characterId == id)?.displayName ?? id)
                         .ToList();
 
-                    var unlockPanel = UiFactory.CreatePanel(canvas.transform, "UnlockPanel", new Vector2(0.5f, 0.38f), new Vector2(420, 90), new Color(0.25f, 0.2f, 0.05f, 0.9f));
+                    var unlockPanel = UiFactory.CreatePanel(canvas.transform, "UnlockPanel", new Vector2(0.5f, 0.38f), new Vector2(420, 90), new Color(QuizBattlePalette.GoldTrimDark.r, QuizBattlePalette.GoldTrimDark.g, QuizBattlePalette.GoldTrimDark.b, 0.9f));
                     var unlockText = UiFactory.CreateText(unlockPanel.transform, "UnlockText", new Vector2(0.5f, 0.5f), new Vector2(400, 70), 18);
                     unlockText.text = $"New character unlocked!\n{string.Join(", ", names)}";
                 }

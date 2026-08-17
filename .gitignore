@@ -15,6 +15,9 @@ web-portal/dist/
 [Oo]bj/
 [Bb]uild/
 [Bb]uilds/
+building/
+.utmp/
+webgl-build/
 [Ll]ogs/
 [Mm]emoryCaptures/
 [Uu]serSettings/

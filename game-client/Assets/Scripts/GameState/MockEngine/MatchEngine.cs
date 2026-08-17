@@ -11,8 +11,8 @@ namespace QuizBattle.GameState.MockEngine
     /// MatchStateStore (server truth) instead of driving this engine directly.
     public static class MatchEngine
     {
-        public static MatchState CreateMatch(int matchId, MatchMode mode, int maxRounds = 20) =>
-            new MatchState(matchId, mode, maxRounds);
+        public static MatchState CreateMatch(int matchId, MatchMode mode, int maxRounds = 20, int? gridHeight = null) =>
+            new MatchState(matchId, mode, maxRounds, gridHeight);
 
         public static PlayerState AddPlayer(MatchState state, int playerId, string name, string characterId, string team, GridPos startPos)
         {
@@ -95,10 +95,18 @@ namespace QuizBattle.GameState.MockEngine
             RewardResolver.ExpireStaleRewards(new[] { player }, player.questionsAnswered);
 
             // A correct answer is what drives you toward the goal — this replaces the
-            // old movement-budget/direction system entirely.
+            // old movement-budget/direction system entirely. A frozen player still
+            // answers/builds streak normally; only this one advance is consumed/skipped.
             if (correct)
             {
-                AdvancePlayer(player, state.gridHeight, 1);
+                if (player.frozen)
+                {
+                    player.frozen = false;
+                }
+                else
+                {
+                    AdvancePlayer(player, state.gridHeight, 1);
+                }
             }
 
             int dotDamage = CombatResolver.TickDot(player);
@@ -131,6 +139,14 @@ namespace QuizBattle.GameState.MockEngine
             player.currentQuestion = null;
             player.questionsAnswered += 1;
             player.consecutiveCorrect = 0;
+
+            // A reward the player never acted on (missed/ignored the popup) must not linger —
+            // SubmitAnswer's pendingReward gate would otherwise silently block every future
+            // streak reward until natural expiry, several questions later.
+            if (player.pendingReward != null)
+            {
+                RewardResolver.ConsumeReward(player, player.pendingReward.rewardId);
+            }
             RewardResolver.ExpireStaleRewards(new[] { player }, player.questionsAnswered);
 
             int dotDamage = CombatResolver.TickDot(player);
@@ -152,6 +168,31 @@ namespace QuizBattle.GameState.MockEngine
             };
         }
 
+        /// Every living player attacker could legally target (alive, not self, not a
+        /// teammate) other than excludeId — used both to enforce "can't target the same
+        /// player twice in a row" and to waive that rule when there's genuinely no one
+        /// else to pick (e.g. a 2-player match), rather than soft-locking the reward entirely.
+        private static bool HasAlternativeTarget(MatchState state, PlayerState attacker, int excludeId)
+        {
+            foreach (var p in state.players.Values)
+            {
+                if (!p.alive || p.playerId == attacker.playerId || p.playerId == excludeId) continue;
+                if (state.mode == MatchMode.Teams && attacker.team != null && attacker.team == p.team) continue;
+                return true;
+            }
+            return false;
+        }
+
+        private static string ValidateTarget(MatchState state, PlayerState attacker, PlayerState target)
+        {
+            if (target == null || !target.alive) return "invalid_target";
+            if (attacker.playerId == target.playerId) return "cannot_target_self";
+            if (state.mode == MatchMode.Teams && attacker.team != null && attacker.team == target.team) return "friendly_fire_blocked";
+            if (attacker.lastTargetedPlayerId == target.playerId && HasAlternativeTarget(state, attacker, target.playerId))
+                return "repeat_target_blocked";
+            return null;
+        }
+
         public struct UseAttackResult
         {
             public bool ok;
@@ -164,17 +205,15 @@ namespace QuizBattle.GameState.MockEngine
         {
             if (!state.players.TryGetValue(playerId, out var attacker) || !attacker.alive)
                 return new UseAttackResult { ok = false, error = "not_in_match" };
-            if (!state.players.TryGetValue(targetId, out var target) || !target.alive)
-                return new UseAttackResult { ok = false, error = "invalid_target" };
-            if (attacker.playerId == target.playerId)
-                return new UseAttackResult { ok = false, error = "cannot_target_self" };
-            if (state.mode == MatchMode.Teams && attacker.team != null && attacker.team == target.team)
-                return new UseAttackResult { ok = false, error = "friendly_fire_blocked" };
+            state.players.TryGetValue(targetId, out var target);
+            var targetError = ValidateTarget(state, attacker, target);
+            if (targetError != null) return new UseAttackResult { ok = false, error = targetError };
             if (attacker.pendingReward == null || attacker.pendingReward.rewardId != rewardId || attacker.pendingReward.type != RewardType.AttackChoice)
                 return new UseAttackResult { ok = false, error = "no_such_reward" };
 
             var consumed = RewardResolver.ConsumeReward(attacker, rewardId);
             if (!consumed.ok) return new UseAttackResult { ok = false, error = consumed.error };
+            attacker.lastTargetedPlayerId = targetId;
 
             var ability = CombatResolver.AttackFor(attacker.characterId);
             var outcome = CombatResolver.ResolveAttack(attacker, target, ability);
@@ -184,6 +223,55 @@ namespace QuizBattle.GameState.MockEngine
             if (result != null) state.status = MatchStatus.Completed;
 
             return new UseAttackResult { ok = true, outcome = outcome, result = result };
+        }
+
+        public struct UseFreezeResult
+        {
+            public bool ok;
+            public string error;
+        }
+
+        /// Freezes the target: their next correct answer won't advance them. Doesn't
+        /// touch HP/position itself, so — unlike attack/bonus_move — it can never itself
+        /// produce a match result.
+        public static UseFreezeResult UseFreeze(MatchState state, int playerId, string rewardId, int targetId)
+        {
+            if (!state.players.TryGetValue(playerId, out var attacker) || !attacker.alive)
+                return new UseFreezeResult { ok = false, error = "not_in_match" };
+            state.players.TryGetValue(targetId, out var target);
+            var targetError = ValidateTarget(state, attacker, target);
+            if (targetError != null) return new UseFreezeResult { ok = false, error = targetError };
+            if (attacker.pendingReward == null || attacker.pendingReward.rewardId != rewardId || attacker.pendingReward.type != RewardType.Freeze)
+                return new UseFreezeResult { ok = false, error = "no_such_reward" };
+
+            var consumed = RewardResolver.ConsumeReward(attacker, rewardId);
+            if (!consumed.ok) return new UseFreezeResult { ok = false, error = consumed.error };
+            attacker.lastTargetedPlayerId = targetId;
+
+            target.frozen = true;
+            return new UseFreezeResult { ok = true };
+        }
+
+        public struct WaiveRewardResult
+        {
+            public bool ok;
+            public string error;
+        }
+
+        /// Clears a pending reward with no other side effect — used when there's no
+        /// valid target to act on it (e.g. attack_choice/freeze with no living
+        /// opponent left). Mirrors server/src/matchEngine/MatchEngine.ts's
+        /// waiveReward — without this, an un-consumed reward stays pending and blocks
+        /// every future reward roll until it naturally expires.
+        public static WaiveRewardResult WaiveReward(MatchState state, int playerId, string rewardId)
+        {
+            if (!state.players.TryGetValue(playerId, out var player))
+                return new WaiveRewardResult { ok = false, error = "not_in_match" };
+            if (player.pendingReward == null || player.pendingReward.rewardId != rewardId)
+                return new WaiveRewardResult { ok = false, error = "no_such_reward" };
+
+            var consumed = RewardResolver.ConsumeReward(player, rewardId);
+            return new WaiveRewardResult { ok = consumed.ok, error = consumed.error };
         }
 
         public struct ConsumeBonusMoveResult

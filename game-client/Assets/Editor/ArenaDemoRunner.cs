@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using QuizBattle.Arena;
 using QuizBattle.Arena.Vfx;
+using QuizBattle.Arena.Visuals;
 using QuizBattle.Characters;
 using QuizBattle.GameState;
 using QuizBattle.GameState.MockEngine;
@@ -18,8 +19,8 @@ public static class ArenaDemoRunner
     public static void Run()
     {
         bool allPassed = true;
-        allPassed &= RunScenario("hp-path", seed: 1, maxRounds: 20, screenshotName: "arena-demo-hp-path.png");
-        allPassed &= RunScenario("zone-control-path", seed: 1, maxRounds: 2, screenshotName: "arena-demo-zone-control-path.png");
+        allPassed &= RunScenario("race-path", seed: 1, maxRounds: 20, screenshotName: "arena-demo-race-path.png");
+        allPassed &= RunScenario("progress-tiebreak-path", seed: 1, maxRounds: 2, screenshotName: "arena-demo-progress-tiebreak-path.png");
         allPassed &= RunVfxShowcase();
 
         EditorApplication.Exit(allPassed ? 0 : 1);
@@ -47,6 +48,16 @@ public static class ArenaDemoRunner
 
         Debug.Log($"[ArenaDemoRunner:{label}] PASSED — winner={result.winnerId} reason={result.reason}");
 
+        var grid = Object.FindFirstObjectByType<GridController>();
+        if (grid != null)
+        {
+            foreach (var fct in Object.FindObjectsByType<FloatingCombatText>(FindObjectsInactive.Include))
+            {
+                Object.DestroyImmediate(fct.gameObject);
+            }
+            FloatingCombatText.Spawn(grid.TileToWorldPos(3, 1) + Vector3.up * 1.5f, "-15 HP", QuizBattlePalette.RoofTilesRed, 1.15f);
+        }
+
         CaptureScreenshot(screenshotName);
         return true;
     }
@@ -65,7 +76,7 @@ public static class ArenaDemoRunner
 
         const int width = 8;
         const int height = 6;
-        grid.BuildGrid(width, height, new List<ZoneDef>());
+        grid.BuildGrid(width, height, height - 1);
         ArenaEnvironment.FrameGrid(rig, grid, width, height);
 
         var spawned = new List<ParticleSystem>();
@@ -74,10 +85,15 @@ public static class ArenaDemoRunner
         spawned.AddRange(AbilityVfxPlayer.Play("vfx_wind_trail", grid.TileToWorldPos(0, 4), grid.TileToWorldPos(2, 4), eliminated: false));
         spawned.AddRange(AbilityVfxPlayer.Play("vfx_life_drain", grid.TileToWorldPos(5, 4), grid.TileToWorldPos(6, 5), eliminated: false));
         spawned.AddRange(AbilityVfxPlayer.Play("vfx_basic_strike", grid.TileToWorldPos(6, 1), grid.TileToWorldPos(6, 1), eliminated: true));
+        spawned.AddRange(AbilityVfxPlayer.Play("vfx_freeze", grid.TileToWorldPos(1, 3), grid.TileToWorldPos(3, 3), eliminated: false));
 
         AbilityVfxPlayer.SimulateAll(spawned, 0.15f);
 
-        Debug.Log($"[ArenaDemoRunner:vfx-showcase] spawned {spawned.Count} particle systems across 5 ability tags");
+        FloatingCombatText.Spawn(grid.TileToWorldPos(2, 2) + Vector3.up * 1.5f, "-25 HP CRIT!", QuizBattlePalette.RoofTilesRed, 1.3f);
+        FloatingCombatText.Spawn(grid.TileToWorldPos(4, 1) + Vector3.up * 1.5f, "SHIELDED!", QuizBattlePalette.GoldTrim, 1.1f);
+        FloatingCombatText.Spawn(grid.TileToWorldPos(1, 3) + Vector3.up * 1.5f, "FROZEN!", QuizBattlePalette.WaterBlue, 1.2f);
+
+        Debug.Log($"[ArenaDemoRunner:vfx-showcase] spawned {spawned.Count} particle systems across 6 ability tags");
         CaptureScreenshot("vfx-showcase.png");
         return true;
     }
@@ -111,6 +127,16 @@ public static class ArenaDemoRunner
         {
             token.CompleteMovement();
         }
+
+        // Ensure UI canvases are bound to Camera so they render onto the target RenderTexture
+        foreach (var canvas in Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None))
+        {
+            canvas.renderMode = RenderMode.ScreenSpaceCamera;
+            canvas.worldCamera = camera;
+            canvas.planeDistance = 1.5f;
+            canvas.sortingOrder = 1000;
+        }
+        Canvas.ForceUpdateCanvases();
 
         const int width = 1280;
         const int height = 720;

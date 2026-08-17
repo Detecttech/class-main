@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Merged into Unity's generated manifest at build time (Gradle manifest merger).
+
+  usesCleartextTraffic="true" is required because the server talks plain ws://
+  and http://, not wss:///https:// — Android blocks cleartext traffic by default
+  for apps targeting API 28+ (see docs/wan-deployment.md's HTTPS/WSS note: this
+  is the client-side half of that same known v1 limitation). Without this, every
+  connection attempt is refused by the OS before it reaches the network at all,
+  which is what "unable to connect to remote server" actually means here.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- tools:node="merge" is required here: without it, Gradle's manifest merger
+         replaces Unity's generated <application> with this one instead of combining
+         them.
+
+         The <activity> below is required too, for a separate reason: this Unity
+         version (6000.5.7f1) generates unityLibrary/src/main/java/com/unity3d/player/
+         UnityPlayerActivity.java at build time but does NOT emit a matching <activity>
+         declaration in any of its own manifest templates (verified directly in the
+         Gradle-exported project's merged manifests and blame report) — every
+         androidApplicationEntry setting produces a manifest with an <application> tag
+         and no <activity> at all. The APK still builds and installs successfully with
+         adb, it's just invisible/unlaunchable from the device's home screen with no
+         launcher entry point. Declaring the activity ourselves (matching Unity's own
+         historical default template) is the fix. -->
+    <application android:usesCleartextTraffic="true" tools:node="merge">
+        <activity android:name="com.unity3d.player.UnityPlayerActivity"
+            android:theme="@style/UnityThemeSelector"
+            android:screenOrientation="sensorLandscape"
+            android:launchMode="singleTask"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|orientation|screenLayout|uiMode|screenSize|smallestScreenSize|fontScale|layoutDirection|density"
+            android:hardwareAccelerated="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+        </activity>
+    </application>
+</manifest>

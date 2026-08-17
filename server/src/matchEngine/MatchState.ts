@@ -3,7 +3,7 @@ export interface GridPos {
   y: number;
 }
 
-export type RewardType = "attack_choice" | "bonus_move";
+export type RewardType = "attack_choice" | "freeze" | "bonus_move";
 
 export interface PendingReward {
   rewardId: string;
@@ -35,6 +35,8 @@ export interface PlayerState {
   questionsAnswered: number; // drives reward expiry + the match-length forced-decision cap
   currentQuestion: ActiveQuestion | null; // independent per player, not shared
   goalReached: boolean;
+  frozen: boolean; // consumed on this player's next correct answer — that answer won't advance them
+  lastTargetedPlayerId: number | null; // for the "can't attack/freeze the same player twice in a row" rule
 }
 
 export type WinReason = "hp" | "goal" | "progress";
@@ -58,17 +60,31 @@ export const DEFAULT_GRID = { width: 8, height: 6 };
 export const REWARD_EXPIRY_QUESTIONS = 4;
 export const DEFAULT_BONUS_MOVE_STEPS = 2;
 
+// Steps-to-win is clamped to this range even for very small/large question banks — too
+// few steps makes the race trivial (won on luck), too many makes it drag on forever.
+const MIN_GOAL_STEPS = 4;
+const MAX_GOAL_STEPS = 30;
+
+/** Derives "steps to reach the goal row" from how many questions are in the match's
+ * question bank, so a race is roughly as long as the class's own question set —
+ * clamped to a sane range. Grid height is steps + 1 (players start at row 0). */
+export function computeGridHeight(questionCount: number): number {
+  const steps = Math.min(MAX_GOAL_STEPS, Math.max(MIN_GOAL_STEPS, questionCount));
+  return steps + 1;
+}
+
 export function createMatchState(
   matchId: number,
   mode: "ffa" | "teams",
-  maxRounds = 20
+  maxRounds = 20,
+  gridHeight: number = DEFAULT_GRID.height
 ): MatchState {
   return {
     matchId,
     mode,
     status: "lobby",
     maxRounds,
-    grid: DEFAULT_GRID,
+    grid: { width: DEFAULT_GRID.width, height: gridHeight },
     players: new Map(),
     result: null,
   };

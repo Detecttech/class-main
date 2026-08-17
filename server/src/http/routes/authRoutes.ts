@@ -3,7 +3,7 @@ import { signToken } from "../../auth/jwt";
 import { hashSecret, verifySecret } from "../../auth/passwordHash";
 import { createTeacher, findTeacherByUsername } from "../../db/repositories/teacherRepo";
 import { findClassRosterByCode } from "../../db/repositories/classRepo";
-import { findStudentProfileByName } from "../../db/repositories/studentRepo";
+import { createStudentProfile, findStudentProfileByName } from "../../db/repositories/studentRepo";
 import { db } from "../../db/client";
 
 export const authRoutes = Router();
@@ -34,8 +34,10 @@ authRoutes.post("/auth/teacher/login", (req, res) => {
   res.json({ token, teacher: { id: teacher.id, username: teacher.username, displayName: teacher.display_name } });
 });
 
-// Student "name entry" screen: classCode identifies the roster, name must already be
-// pre-registered by the teacher. First login sets the PIN; subsequent logins verify it.
+// Student "name entry" screen: classCode identifies the roster; a student picks their
+// own name and it's created on first use (no teacher pre-registration required). First
+// login for a given name sets the PIN; subsequent logins with that name verify it — so a
+// name still can't be impersonated by someone else without the PIN once claimed.
 authRoutes.post("/auth/student/login", (req, res) => {
   const { classCode, name, pin } = req.body ?? {};
   if (!classCode || !name || !pin) {
@@ -47,12 +49,10 @@ authRoutes.post("/auth/student/login", (req, res) => {
     res.status(404).json({ code: "not_found", message: "Unknown class code" });
     return;
   }
-  const student = findStudentProfileByName(roster.id, name);
+  let student = findStudentProfileByName(roster.id, name);
   if (!student) {
-    res.status(404).json({ code: "not_found", message: "Name not found on this class roster" });
-    return;
-  }
-  if (!student.pin_hash) {
+    student = createStudentProfile(roster.id, name, hashSecret(pin));
+  } else if (!student.pin_hash) {
     db.prepare("UPDATE student_profiles SET pin_hash = ? WHERE id = ?").run(hashSecret(pin), student.id);
   } else if (!verifySecret(pin, student.pin_hash)) {
     res.status(401).json({ code: "invalid_credentials", message: "Incorrect PIN" });

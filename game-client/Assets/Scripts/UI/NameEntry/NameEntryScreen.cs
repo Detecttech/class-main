@@ -10,10 +10,11 @@ using UnityEngine.UI;
 namespace QuizBattle.UI.NameEntry
 {
     /// The "greeted by a name screen" flow, scoped to a class per the privacy-conscious
-    /// identity design: classCode -> name (must already be on the teacher's roster) -> a
-    /// PIN the student sets on first login and confirms on every later one, plus the
-    /// match code the teacher is displaying for this session. No email, no third-party
-    /// auth — see server/src/http/routes/authRoutes.ts for the matching login endpoint.
+    /// identity design: classCode -> a name the student picks themselves (created on
+    /// first use, no teacher pre-registration required) -> a PIN the student sets on
+    /// first login and confirms on every later one, plus the match code the teacher is
+    /// displaying for this session. No email, no third-party auth — see
+    /// server/src/http/routes/authRoutes.ts for the matching login endpoint.
     public class NameEntryScreen : MonoBehaviour
     {
         private TMP_InputField _classCodeField;
@@ -94,7 +95,7 @@ namespace QuizBattle.UI.NameEntry
             }
             client.MessageReceived += OnAck;
             client.Send("hello", new { role = "student", token = login.Token });
-            if (!await WaitUntil(client, () => acked, 5000))
+            if (!await WsClient.WaitUntil(client, () => acked, 5000))
             {
                 client.MessageReceived -= OnAck;
                 _statusText.text = "Lost connection to the server. Please reconnect.";
@@ -105,7 +106,7 @@ namespace QuizBattle.UI.NameEntry
 
             _statusText.text = "Joining match...";
             client.Send("join_lobby", new { joinCode = matchCode, name = login.Name });
-            bool inLobby = await WaitUntil(client, () => store.LobbyPlayers.Exists(p => p.playerId == SessionManager.PlayerId), 5000);
+            bool inLobby = await WsClient.WaitUntil(client, () => store.LobbyPlayers.Exists(p => p.playerId == SessionManager.PlayerId), 5000);
 
             if (!inLobby)
             {
@@ -115,20 +116,6 @@ namespace QuizBattle.UI.NameEntry
             }
 
             SceneManager.LoadScene("CharacterSelect");
-        }
-
-        // Not ConfigureAwait(false): PumpMessages() below synchronously fires
-        // MatchStateStore events, which UI screens subscribe to and use to update Unity
-        // UI — those handlers need to run on the main thread.
-        private static async Task<bool> WaitUntil(WsClient client, Func<bool> condition, int timeoutMs)
-        {
-            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (!condition() && DateTime.UtcNow < deadline)
-            {
-                client.PumpMessages();
-                await Task.Delay(50);
-            }
-            return condition();
         }
     }
 }

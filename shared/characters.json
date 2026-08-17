@@ -3,7 +3,7 @@
     {
       "id": "blaze",
       "name": "Blaze",
-      "baseStats": { "hp": 60, "moveRange": 1 },
+      "baseStats": { "hp": 45, "moveRange": 1 },
       "ability": {
         "id": "fireball",
         "name": "Fireball",
@@ -21,7 +21,7 @@
     {
       "id": "aegis",
       "name": "Aegis",
-      "baseStats": { "hp": 70, "moveRange": 1 },
+      "baseStats": { "hp": 55, "moveRange": 1 },
       "ability": {
         "id": "bulwark",
         "name": "Bulwark",
@@ -49,7 +49,7 @@
     {
       "id": "vera",
       "name": "Vera",
-      "baseStats": { "hp": 55, "moveRange": 1 },
+      "baseStats": { "hp": 50, "moveRange": 1 },
       "ability": {
         "id": "life_drain",
         "name": "Life Drain",

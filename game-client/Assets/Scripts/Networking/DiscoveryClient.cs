@@ -29,6 +29,13 @@ namespace QuizBattle.Networking
         public static async Task<DiscoveredServer[]> Discover(int timeoutMs = 2000)
         {
             var found = new System.Collections.Generic.List<DiscoveredServer>();
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // Raw UDP sockets don't exist in a browser sandbox — System.Net.Sockets isn't
+            // even available on this platform. WebGL players always fall through to the
+            // manual IP-entry field in ConnectScreen, same as any LAN that blocks broadcast.
+            await Task.Yield();
+            return found.ToArray();
+#else
             using var udp = new UdpClient { EnableBroadcast = true };
 
             var payload = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new { discover = DiscoveryRequest }));
@@ -66,6 +73,7 @@ namespace QuizBattle.Networking
             }
 
             return found.ToArray();
+#endif
         }
     }
 }

@@ -6,16 +6,21 @@ using UnityEngine;
 namespace QuizBattle.Arena
 {
     /// A per-archetype stylized body (see CharacterVisualBuilder) plus a billboarded
-    /// nameplate (name text + HP bar) above it.
+    /// nameplate (name text + HP bar) above it. Features juicy Clash Royale-style
+    /// parabolic hopping, squash & stretch landing impacts, grounded blob contact shadows,
+    /// and hit reactions.
     public class CharacterToken : MonoBehaviour
     {
         private const float BarWidth = 0.9f;
         private const float BarHeight = 0.1f;
         private const float NameplateHeight = 1.5f;
-        private const float MoveDuration = 0.35f;
+        private const float MoveDuration = 0.32f;
+        private const float HopHeight = 0.42f;
 
         private TMP_Text _nameLabel;
         private Renderer[] _bodyRenderers;
+        private Transform _bodyContainer;
+        private TokenIdleAnimator _animator;
         private Transform _hpFillPivot;
         private Renderer _hpFillRenderer;
         private string _displayName;
@@ -23,11 +28,15 @@ namespace QuizBattle.Arena
         private int _maxHp;
         private int _streak;
         private bool _eliminated;
+        private GameObject _frozenIndicator;
 
         private Vector3 _moveStart;
         private Vector3 _moveTarget;
         private float _moveElapsed;
         private bool _moving;
+
+        private float _landingBounceTime;
+        private float _flinchTime;
 
         /// Fallback overload for any call site that only has a bare color (e.g. a missed
         /// migration) — degrades to a generic capsule instead of failing to compile.
@@ -50,17 +59,37 @@ namespace QuizBattle.Arena
 
             var nameLabel = CreateNameLabel(nameplate.transform);
             var (fillPivot, fillRenderer) = CreateHpBar(nameplate.transform, visual.BaseColor);
+            var frozenIndicator = CreateFrozenIndicator(root.transform);
 
             if (Camera.main != null) billboard.Align(Camera.main);
 
             var token = root.AddComponent<CharacterToken>();
             token._nameLabel = nameLabel;
             token._bodyRenderers = visualResult.Renderers;
+            token._bodyContainer = bodyContainer.transform;
+            token._animator = bodyContainer.GetComponent<TokenIdleAnimator>();
             token._hpFillPivot = fillPivot;
             token._hpFillRenderer = fillRenderer;
+            token._frozenIndicator = frozenIndicator;
             token._displayName = displayName;
             token.SetHp(0, 0);
             return token;
+        }
+
+        /// A slowly pulsing icy ring, layered just above the archetype's own ground disc
+        /// — hidden until SetFrozen(true), so it costs nothing when unused.
+        private static GameObject CreateFrozenIndicator(Transform parent)
+        {
+            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            go.name = "FrozenRing";
+            go.transform.SetParent(parent, false);
+            go.transform.localPosition = new Vector3(0f, 0.05f, 0f);
+            go.transform.localScale = new Vector3(0.95f, 0.02f, 0.95f);
+            Object.Destroy(go.GetComponent<Collider>());
+            go.GetComponent<Renderer>().sharedMaterial =
+                ToonMaterialFactory.Glow(new Color(0.55f, 0.9f, 1f), intensity: 1.2f, softEdge: 0.3f, pulseSpeed: 3f, pulseAmount: 0.4f);
+            go.SetActive(false);
+            return go;
         }
 
         private static TMP_Text CreateNameLabel(Transform parent)
@@ -111,9 +140,6 @@ namespace QuizBattle.Arena
             bg.transform.localPosition = Vector3.zero;
             bg.transform.localScale = new Vector3(BarWidth, BarHeight, 1f);
             Object.Destroy(bg.GetComponent<Collider>());
-            // Opaque flat plate (not the additive glow shader — additive can't render a
-            // dark backing that actually occludes what's behind it), outline/rim off so
-            // it reads as a flat card rather than a shaded object.
             var barBgStyle = new ToonStyle
             {
                 ShadowTint = new Color(0.05f, 0.05f, 0.08f),
@@ -138,8 +164,6 @@ namespace QuizBattle.Arena
             fill.transform.localScale = new Vector3(BarWidth, BarHeight, 1f);
             Object.Destroy(fill.GetComponent<Collider>());
             var fillRenderer = fill.GetComponent<Renderer>();
-            // Instance, not the shared/cached Glow(...), since SetEliminated recolors
-            // this renderer's material directly.
             fillRenderer.sharedMaterial = ToonMaterialFactory.GlowInstance(fillColor, intensity: 1.2f, softEdge: 0.02f);
 
             return (fillPivot.transform, fillRenderer);
@@ -147,6 +171,11 @@ namespace QuizBattle.Arena
 
         public void SetHp(int hp, int maxHp)
         {
+            if (_maxHp > 0 && hp < _hp)
+            {
+                _flinchTime = 0.25f;
+            }
+
             _hp = hp;
             _maxHp = maxHp;
             float fraction = maxHp > 0 ? Mathf.Clamp01((float)hp / maxHp) : 1f;
@@ -167,8 +196,6 @@ namespace QuizBattle.Arena
             foreach (var renderer in _bodyRenderers)
             {
                 if (renderer == null) continue;
-                // Renderers built from GlowInstance materials use _TintColor, the toon
-                // body/accent renderers use _BaseColor — set whichever the shader has.
                 if (renderer.sharedMaterial.HasColor("_BaseColor")) renderer.sharedMaterial.SetColor("_BaseColor", dim);
                 if (renderer.sharedMaterial.HasColor("_TintColor")) renderer.sharedMaterial.SetColor("_TintColor", dim);
             }
@@ -176,19 +203,20 @@ namespace QuizBattle.Arena
             RebuildLabel();
         }
 
-        /// Animates the visual slide from the current position to worldPos over
-        /// MoveDuration via Update() — a plain instant `transform.position = worldPos`
-        /// gave no visible feedback that a move happened at all. Grid/gameplay logic
-        /// never reads this transform, so the animated delay has no effect on match
-        /// state; only the headless demo runners (which drive matches synchronously with
-        /// no player loop, so Update never fires) need CompleteMovement() to force the
-        /// final position before a screenshot.
+        public void SetFrozen(bool frozen)
+        {
+            if (_frozenIndicator != null) _frozenIndicator.SetActive(frozen);
+        }
+
+        /// Animates the juicy parabolic hop from current position to worldPos with
+        /// squash & stretch physics.
         public void MoveTo(Vector3 worldPos)
         {
             _moveStart = transform.position;
             _moveTarget = worldPos;
             _moveElapsed = 0f;
             _moving = true;
+            if (_animator != null) _animator.SetPaused(true);
         }
 
         /// Snaps immediately to the current move target. Call before capturing a
@@ -197,16 +225,102 @@ namespace QuizBattle.Arena
         {
             if (!_moving) return;
             transform.position = _moveTarget;
+            if (_bodyContainer != null)
+            {
+                _bodyContainer.localPosition = Vector3.zero;
+                _bodyContainer.localRotation = Quaternion.identity;
+                _bodyContainer.localScale = Vector3.one;
+            }
             _moving = false;
+            if (_animator != null) _animator.SetPaused(false);
         }
 
         private void Update()
         {
-            if (!_moving) return;
-            _moveElapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(_moveElapsed / MoveDuration);
-            transform.position = Vector3.Lerp(_moveStart, _moveTarget, t);
-            if (t >= 1f) _moving = false;
+            if (_moving)
+            {
+                _moveElapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(_moveElapsed / MoveDuration);
+
+                // Horizontal movement
+                Vector3 currentPos = Vector3.Lerp(_moveStart, _moveTarget, t);
+
+                // Parabolic hop arc
+                float hop = Mathf.Sin(t * Mathf.PI) * HopHeight;
+                transform.position = currentPos + Vector3.up * hop;
+
+                if (_bodyContainer != null)
+                {
+                    // Directional tilt while moving
+                    Vector3 moveDir = (_moveTarget - _moveStart).normalized;
+                    if (moveDir.sqrMagnitude > 0.001f)
+                    {
+                        float tilt = Mathf.Sin(t * Mathf.PI) * 14f;
+                        _bodyContainer.localRotation = Quaternion.Euler(tilt, 0f, 0f);
+                    }
+
+                    // Squash & stretch curve
+                    float scaleY;
+                    float scaleXZ;
+                    if (t < 0.25f)
+                    {
+                        // Takeoff launch stretch
+                        float launchT = t / 0.25f;
+                        scaleY = 1f + Mathf.Sin(launchT * Mathf.PI) * 0.22f;
+                        scaleXZ = 1f - Mathf.Sin(launchT * Mathf.PI) * 0.12f;
+                    }
+                    else if (t > 0.80f)
+                    {
+                        // Landing impact squash
+                        float landT = (t - 0.80f) / 0.20f;
+                        scaleY = 1f - (1f - landT) * 0.22f;
+                        scaleXZ = 1f + (1f - landT) * 0.15f;
+                    }
+                    else
+                    {
+                        // Mid-air slight stretch
+                        scaleY = 1.08f;
+                        scaleXZ = 0.95f;
+                    }
+                    _bodyContainer.localScale = new Vector3(scaleXZ, scaleY, scaleXZ);
+                }
+
+                if (t >= 1f)
+                {
+                    _moving = false;
+                    _landingBounceTime = 0.2f;
+                    if (_animator != null) _animator.SetPaused(false);
+                }
+            }
+            else if (_landingBounceTime > 0f)
+            {
+                // Damped spring bounce upon landing
+                _landingBounceTime -= Time.deltaTime;
+                float bounceT = Mathf.Clamp01(_landingBounceTime / 0.2f);
+                float spring = Mathf.Sin((1f - bounceT) * Mathf.PI * 2f) * 0.12f * bounceT;
+                if (_bodyContainer != null)
+                {
+                    _bodyContainer.localRotation = Quaternion.identity;
+                    _bodyContainer.localScale = new Vector3(1f - spring, 1f + spring, 1f - spring);
+                }
+            }
+            else if (_flinchTime > 0f)
+            {
+                // Damage flinch shake
+                _flinchTime -= Time.deltaTime;
+                float flinchT = Mathf.Clamp01(_flinchTime / 0.25f);
+                float shake = Mathf.Sin(flinchT * Mathf.PI * 6f) * 0.08f * flinchT;
+                if (_bodyContainer != null)
+                {
+                    _bodyContainer.localPosition = new Vector3(shake, -shake * 0.5f, 0f);
+                    _bodyContainer.localScale = new Vector3(1f + flinchT * 0.15f, 1f - flinchT * 0.2f, 1f + flinchT * 0.15f);
+                }
+            }
+            else if (_bodyContainer != null)
+            {
+                _bodyContainer.localPosition = Vector3.zero;
+                _bodyContainer.localRotation = Quaternion.identity;
+            }
         }
 
         private void RebuildLabel()

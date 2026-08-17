@@ -20,6 +20,7 @@ namespace QuizBattle.GameState.MockEngine
     public enum RewardType
     {
         AttackChoice,
+        Freeze,
         BonusMove,
     }
 
@@ -62,6 +63,8 @@ namespace QuizBattle.GameState.MockEngine
         public int questionsAnswered; // drives reward expiry + the match-length forced-decision cap
         public ActiveQuestion currentQuestion; // independent per player, not shared
         public bool goalReached;
+        public bool frozen; // consumed on this player's next correct answer — that answer won't advance them
+        public int? lastTargetedPlayerId; // for the "can't attack/freeze the same player twice in a row" rule
     }
 
     public class AnswerRecord
@@ -103,6 +106,18 @@ namespace QuizBattle.GameState.MockEngine
         public const int RewardExpiryQuestions = 4;
         public const int DefaultBonusMoveSteps = 2;
 
+        // Mirrors server MatchState.ts's computeGridHeight — steps-to-win tracks the
+        // question bank size, clamped to a sane range. Not used by the local mock demo
+        // today (it has no fixed bank size), but kept in lockstep for API parity.
+        private const int MinGoalSteps = 4;
+        private const int MaxGoalSteps = 30;
+
+        public static int ComputeGridHeight(int questionCount)
+        {
+            int steps = System.Math.Min(MaxGoalSteps, System.Math.Max(MinGoalSteps, questionCount));
+            return steps + 1;
+        }
+
         public int matchId;
         public MatchMode mode;
         public MatchStatus status = MatchStatus.Lobby;
@@ -112,11 +127,12 @@ namespace QuizBattle.GameState.MockEngine
         public Dictionary<int, PlayerState> players = new Dictionary<int, PlayerState>();
         public MatchResult result;
 
-        public MatchState(int matchId, MatchMode mode, int maxRounds = 20)
+        public MatchState(int matchId, MatchMode mode, int maxRounds = 20, int? gridHeight = null)
         {
             this.matchId = matchId;
             this.mode = mode;
             this.maxRounds = maxRounds;
+            if (gridHeight.HasValue) this.gridHeight = gridHeight.Value;
         }
     }
 }

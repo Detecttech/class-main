@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using QuizBattle.Arena;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -31,40 +32,64 @@ namespace QuizBattle.UI.HUD
 
         private void Build(Transform parent)
         {
-            _roundText = QuizBattle.UI.UiFactory.CreateText(parent, "RoundText", new Vector2(0.5f, 0.94f), new Vector2(400, 40), 22);
-            _questionText = QuizBattle.UI.UiFactory.CreateText(parent, "QuestionText", new Vector2(0.5f, 0.84f), new Vector2(900, 70), 26);
+            // Question Placard Banner at the top
+            var (placard, innerCard) = QuizBattle.UI.UiFactory.CreatePlacardPanel(
+                parent, "QuestionPlacard", new Vector2(0.5f, 0.938f), new Vector2(860, 56), QuizBattlePalette.PanelDeep);
 
-            // 2x2 grid, not a single row: at the 1280-wide reference resolution a 4-across
-            // row of 210px-wide buttons only had ~154px between anchor points — less than
-            // the button width, so they visually overlapped into one solid bar. This
-            // layout leaves generous margin (512px between column anchors vs 380px wide
-            // buttons) regardless of actual screen size, since CanvasScaler scales both
-            // proportionally.
+            // Question Sequence Ribbon Badge
+            var (badge, _) = QuizBattle.UI.UiFactory.CreateBannerPanel(
+                placard, "QuestionBadge", new Vector2(0.5f, 1f), new Vector2(170, 24), QuizBattlePalette.BannerBlue, new Vector2(0, 0));
+            _roundText = QuizBattle.UI.UiFactory.CreateText(badge, "RoundText", new Vector2(0.5f, 0.5f), new Vector2(160, 22), 13);
+            _roundText.fontStyle = FontStyles.Bold;
+            _roundText.color = QuizBattlePalette.GoldTrim;
+
+            // Question Text inside the placard
+            _questionText = QuizBattle.UI.UiFactory.CreateText(
+                innerCard.transform, "QuestionText", new Vector2(0.5f, 0.5f), new Vector2(830, 44), 16);
+            _questionText.fontStyle = FontStyles.Bold;
+            _questionText.color = Color.white;
+            _questionText.outlineWidth = 0.18f;
+            _questionText.outlineColor = Color.black;
+
+            // 2x2 grid of 3D-beveled tactile Clash Royale choice buttons (compacted into top 24%)
             _choiceButtons = new Button[4];
             _choiceLabels = new TMP_Text[4];
-            (float x, float y)[] gridPositions = { (0.30f, 0.68f), (0.70f, 0.68f), (0.30f, 0.56f), (0.70f, 0.56f) };
+            (float x, float y)[] gridPositions = { (0.285f, 0.842f), (0.715f, 0.842f), (0.285f, 0.762f), (0.715f, 0.762f) };
+            string[] badges = { "A", "B", "C", "D" };
+            Color[] colors = {
+                new Color(0.16f, 0.44f, 0.88f), // Royal Blue
+                new Color(0.18f, 0.68f, 0.28f), // Emerald Green
+                new Color(0.88f, 0.56f, 0.12f), // Amber Gold
+                new Color(0.82f, 0.22f, 0.22f), // Crimson
+            };
+            Color[] shadows = {
+                new Color(0.10f, 0.28f, 0.60f),
+                new Color(0.10f, 0.44f, 0.18f),
+                new Color(0.58f, 0.35f, 0.08f),
+                new Color(0.52f, 0.12f, 0.12f),
+            };
+
             for (int i = 0; i < 4; i++)
             {
                 int index = i;
                 var (x, y) = gridPositions[i];
-                var button = QuizBattle.UI.UiFactory.CreateButton(parent, $"Choice_{i}", new Vector2(x, y), new Vector2(380, 70), "");
-                var label = button.GetComponentInChildren<TMP_Text>();
-                label.fontSize = 22;
+                var (button, label) = QuizBattle.UI.UiFactory.CreateClashButton(
+                    parent, $"Choice_{i}", new Vector2(x, y), new Vector2(360, 42), "", colors[i], shadows[i], badges[i]);
+                label.fontSize = 16;
                 button.onClick.AddListener(() => ChoiceSelected?.Invoke(index));
                 _choiceButtons[i] = button;
                 _choiceLabels[i] = label;
             }
 
-            // Bottom-left corner anchor with a fixed margin, not a fractional position —
-            // the previous 0.15-anchored, 480-wide panel ran off the left edge of the
-            // screen entirely on narrower/non-16:9 windows.
-            const float margin = 20f;
-            const float logWidth = 420f;
-            const float logHeight = 220f;
-            var logPanel = QuizBattle.UI.UiFactory.CreatePanel(
+            // Bottom-left corner match log in a semi-transparent royal slate card (unobtrusive)
+            const float margin = 12f;
+            const float logWidth = 280f;
+            const float logHeight = 90f;
+            var (logPlacard, logInner) = QuizBattle.UI.UiFactory.CreatePlacardPanel(
                 parent, "LogPanel", new Vector2(0f, 0f), new Vector2(logWidth, logHeight),
-                new Color(0, 0, 0, 0.6f), new Vector2(margin + logWidth / 2f, margin + logHeight / 2f));
-            _logText = QuizBattle.UI.UiFactory.CreateText(logPanel.transform, "LogText", new Vector2(0.5f, 0.5f), new Vector2(logWidth - 20f, logHeight - 20f), 14);
+                new Color(0.08f, 0.09f, 0.14f, 0.80f), new Vector2(margin + logWidth / 2f, margin + logHeight / 2f));
+            _logText = QuizBattle.UI.UiFactory.CreateText(
+                logInner.transform, "LogText", new Vector2(0.5f, 0.5f), new Vector2(logWidth - 16f, logHeight - 12f), 11);
             _logText.alignment = TextAlignmentOptions.TopLeft;
         }
 

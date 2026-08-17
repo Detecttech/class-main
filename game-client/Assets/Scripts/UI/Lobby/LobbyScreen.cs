@@ -1,3 +1,4 @@
+using System;
 using System.Text;
 using QuizBattle.Bootstrap;
 using QuizBattle.Networking;
@@ -23,6 +24,7 @@ namespace QuizBattle.UI.Lobby
         private Button _teamBButton;
         private bool _isReady;
         private bool _isTeamMatch;
+        private bool _reconnecting;
 
         private void Start()
         {
@@ -32,6 +34,7 @@ namespace QuizBattle.UI.Lobby
             store.LobbyUpdated += OnLobbyUpdated;
             store.CharacterLocked += OnCharacterLocked;
             store.MatchStarted += OnMatchStarted;
+            AppRoot.Instance.Client.Disconnected += OnDisconnected;
 
             _isTeamMatch = store.Mode == "teams";
             _teamAButton.gameObject.SetActive(_isTeamMatch);
@@ -46,6 +49,62 @@ namespace QuizBattle.UI.Lobby
             store.LobbyUpdated -= OnLobbyUpdated;
             store.CharacterLocked -= OnCharacterLocked;
             store.MatchStarted -= OnMatchStarted;
+            AppRoot.Instance.Client.Disconnected -= OnDisconnected;
+        }
+
+        // A dropped connection (WiFi hiccup, app backgrounded, etc.) during the lobby
+        // wait silently removes this player's lobby entry server-side (see
+        // LiveMatchRegistry.removeConnection) with nothing to automatically re-add them —
+        // WsClient has no reconnect logic of its own. This replays the same
+        // hello+join_lobby sequence NameEntryScreen used originally, using the session
+        // state it already stashed in SessionManager, so the player reappears in the
+        // lobby without needing to back out and re-enter their details.
+        private async void OnDisconnected(string reason)
+        {
+            if (_reconnecting) return;
+            _reconnecting = true;
+            _statusText.text = "Connection lost — reconnecting...";
+
+            var client = AppRoot.Instance.Client;
+            try
+            {
+                await client.Connect(SessionManager.WsUrl);
+            }
+            catch (Exception e)
+            {
+                _statusText.text = $"Reconnect failed: {e.Message}";
+                _reconnecting = false;
+                return;
+            }
+
+            bool acked = false;
+            void OnAck(Envelope env)
+            {
+                if (env.Type == "hello_ack")
+                {
+                    SessionManager.PlayerId = env.Payload["playerId"].ToObject<int>();
+                    acked = true;
+                }
+            }
+            client.MessageReceived += OnAck;
+            client.Send("hello", new { role = "student", token = SessionManager.AuthToken });
+            if (!await WsClient.WaitUntil(client, () => acked, 5000))
+            {
+                client.MessageReceived -= OnAck;
+                _statusText.text = "Reconnected, but re-authentication timed out.";
+                _reconnecting = false;
+                return;
+            }
+            client.MessageReceived -= OnAck;
+
+            var store = AppRoot.Instance.Store;
+            client.Send("join_lobby", new { joinCode = SessionManager.JoinCode, name = SessionManager.StudentName });
+            bool inLobby = await WsClient.WaitUntil(client, () => store.LobbyPlayers.Exists(p => p.playerId == SessionManager.PlayerId), 5000);
+
+            _statusText.text = inLobby
+                ? "Reconnected — waiting for the teacher to start the match..."
+                : "Reconnected, but could not rejoin the lobby. Try going back and re-entering the match code.";
+            _reconnecting = false;
         }
 
         private void Build()

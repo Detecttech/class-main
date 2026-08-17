@@ -80,12 +80,7 @@ namespace QuizBattle.UI.Connect
             client.MessageReceived += OnAck;
             client.Send("hello", new { role = "student" });
 
-            var deadline = DateTime.UtcNow.AddSeconds(5);
-            while (!acked && DateTime.UtcNow < deadline)
-            {
-                client.PumpMessages();
-                await Task.Delay(50);
-            }
+            await WsClient.WaitUntil(client, () => acked, 5000);
             client.MessageReceived -= OnAck;
 
             if (!acked)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using QuizBattle.Arena;
 using QuizBattle.Arena.Vfx;
+using QuizBattle.Arena.Visuals;
 using QuizBattle.Characters;
 using QuizBattle.GameState.MockEngine;
 using QuizBattle.UI.HUD;
@@ -10,11 +11,10 @@ using UnityEngine;
 
 namespace QuizBattle.GameState
 {
-    /// Drives a local, no-networking "mock match" end to end using MockEngine — the
-    /// Phase 1 goal from the project plan: validate grid movement, question/streak/reward
-    /// UX, and both win-condition paths before any server is involved. Auto-play only for
-    /// now (dummy players answer with a biased coin flip); a human-controlled path arrives
-    /// once this loop is proven out.
+    /// Drives a local, no-networking "mock match" end to end using MockEngine — validates
+    /// the race-to-the-goal/elimination win conditions and independent-per-player question
+    /// flow before any server is involved. Auto-play only for now (dummy players answer
+    /// with a biased coin flip); a human-controlled path arrives once this loop is proven out.
     public class GameManager : MonoBehaviour
     {
         private GridController _grid;
@@ -23,11 +23,6 @@ namespace QuizBattle.GameState
         private List<CharacterDefinitionSO> _characterDefs;
         private MatchState _state;
         private readonly Dictionary<int, CharacterToken> _tokens = new Dictionary<int, CharacterToken>();
-
-        private static readonly GridPos[] StartPositions =
-        {
-            new GridPos(0, 0), new GridPos(7, 0), new GridPos(0, 5), new GridPos(7, 5),
-        };
 
         public static GameManager Bootstrap(List<CharacterDefinitionSO> characterDefs)
         {
@@ -49,19 +44,34 @@ namespace QuizBattle.GameState
             return manager;
         }
 
+        /// Spreads players evenly across the bottom row, one lane each — mirrors
+        /// server/src/matchEngine/LiveMatchRegistry.ts's startPositions().
+        private static GridPos[] StartPositions(int count, int gridWidth)
+        {
+            var positions = new GridPos[count];
+            for (int i = 0; i < count; i++)
+            {
+                positions[i] = new GridPos(Mathf.FloorToInt((i + 0.5f) * gridWidth / count), 0);
+            }
+            return positions;
+        }
+
         /// Runs a full match synchronously (no coroutines) so it can be driven from Editor
-        /// tooling without needing Play mode's ticking player loop.
+        /// tooling without needing Play mode's ticking player loop. Players answer
+        /// independently — each gets their own random question in turn, rather than a
+        /// shared/synced round — so this loops player-by-player instead of round-by-round.
         public MatchResult RunAutoPlayMatch(int seed, int maxRounds = 20)
         {
             var rng = new System.Random(seed);
             _state = MatchEngine.CreateMatch(1, MatchMode.Ffa, maxRounds);
-            _grid.BuildGrid(_state.gridWidth, _state.gridHeight, _state.zones);
+            _grid.BuildGrid(_state.gridWidth, _state.gridHeight, _state.gridHeight - 1);
             PositionCamera();
 
+            var positions = StartPositions(_characterDefs.Count, _state.gridWidth);
             for (int i = 0; i < _characterDefs.Count; i++)
             {
                 var def = _characterDefs[i];
-                var startPos = StartPositions[i % StartPositions.Length];
+                var startPos = positions[i];
                 var player = MatchEngine.AddPlayer(_state, i + 1, def.displayName, def.characterId, null, startPos);
                 var token = CharacterToken.Create(def.displayName, CharacterVisual.From(def), _grid.TileToWorldPos(startPos.x, startPos.y));
                 token.SetHp(player.hp, player.maxHp);
@@ -69,37 +79,43 @@ namespace QuizBattle.GameState
             }
 
             MatchEngine.StartMatch(_state);
-            _hud.Log("Match started!");
+            _hud.Log("Match started! Race to the top row.");
 
-            int questionId = 1;
-            int roundGuard = 0;
-            while (_state.result == null && roundGuard < 200)
+            int questionSeq = 1;
+            int guard = 0;
+            while (_state.result == null && guard < 400)
             {
-                roundGuard++;
-                int correctIndex = rng.Next(4);
-                var choices = new[] { "Option A", "Option B", "Option C", "Option D" };
-                int qid = questionId++;
-                MatchEngine.PushQuestion(_state, qid, correctIndex);
-                _hud.ShowQuestion(_state.round, $"Demo question #{qid}", choices);
-
+                guard++;
                 foreach (var player in _state.players.Values.Where(p => p.alive).ToList())
                 {
-                    // Biased toward correct (70%) so streaks reliably occur in a short demo.
+                    if (_state.result != null) break;
+
+                    int correctIndex = rng.Next(4);
+                    var choices = new[] { "Option A", "Option B", "Option C", "Option D" };
+                    int qid = questionSeq++;
+                    MatchEngine.PushQuestion(_state, player.playerId, qid, correctIndex);
+                    _hud.ShowQuestion(player.questionsAnswered + 1, $"Demo question #{qid}", choices);
+
+                    // Biased toward correct (70%) so streaks and lane progress reliably occur in a short demo.
                     int chosen = rng.NextDouble() < 0.7 ? correctIndex : (correctIndex + 1) % 4;
                     var result = MatchEngine.SubmitAnswer(_state, player.playerId, chosen, () => rng.NextDouble());
+                    UpdateVisuals();
+
+                    if (result.ok && _tokens.TryGetValue(player.playerId, out var pt))
+                    {
+                        FloatingCombatText.Spawn(pt.transform.position + Vector3.up * 1.5f, player.consecutiveCorrect >= 2 ? $"STREAK x{player.consecutiveCorrect}!" : "CORRECT!", QuizBattlePalette.GoldTrim, 1.05f);
+                    }
+
                     if (result.rewardOffered != null)
                     {
                         HandleReward(player, result.rewardOffered, rng);
+                        UpdateVisuals();
                     }
-                }
 
-                var resolution = MatchEngine.ResolveRound(_state);
-                UpdateVisuals();
-                _hud.Log($"Round {_state.round - 1} resolved (correct=#{resolution.correctIndex + 1})");
-
-                if (resolution.result != null)
-                {
-                    _hud.Log($"MATCH OVER — winner: {resolution.result.winnerId} ({resolution.result.reason})");
+                    if (_state.result != null)
+                    {
+                        _hud.Log($"MATCH OVER — winner: {_state.result.winnerId} ({_state.result.reason})");
+                    }
                 }
             }
 
@@ -110,31 +126,53 @@ namespace QuizBattle.GameState
         {
             if (reward.type == RewardType.AttackChoice)
             {
-                var targets = _state.players.Values.Where(p => p.alive && p.playerId != player.playerId).ToList();
-                if (targets.Count == 0) return;
-                var target = targets[rng.Next(targets.Count)];
+                var target = PickRandomTarget(player, rng);
+                if (target == null)
+                {
+                    MatchEngine.WaiveReward(_state, player.playerId, reward.rewardId);
+                    return;
+                }
                 var atk = MatchEngine.UseAttack(_state, player.playerId, reward.rewardId, target.playerId);
                 if (atk.ok)
                 {
                     if (_tokens.TryGetValue(player.playerId, out var attackerToken) && _tokens.TryGetValue(target.playerId, out var targetToken))
                     {
                         AbilityVfxPlayer.Play(atk.outcome.vfxTag, attackerToken.transform.position, targetToken.transform.position, !target.alive);
+                        FloatingCombatText.Spawn(targetToken.transform.position + Vector3.up * 1.5f, $"-{atk.outcome.damage} HP", QuizBattlePalette.RoofTilesRed, 1.25f);
                     }
                     _hud.Log($"{player.name} attacks {target.name} for {atk.outcome.damage} dmg!");
+                }
+            }
+            else if (reward.type == RewardType.Freeze)
+            {
+                var target = PickRandomTarget(player, rng);
+                if (target == null)
+                {
+                    MatchEngine.WaiveReward(_state, player.playerId, reward.rewardId);
+                    return;
+                }
+                var frz = MatchEngine.UseFreeze(_state, player.playerId, reward.rewardId, target.playerId);
+                if (frz.ok)
+                {
+                    if (_tokens.TryGetValue(player.playerId, out var casterToken) && _tokens.TryGetValue(target.playerId, out var targetToken))
+                    {
+                        AbilityVfxPlayer.Play("vfx_freeze", casterToken.transform.position, targetToken.transform.position, eliminated: false);
+                        FloatingCombatText.Spawn(targetToken.transform.position + Vector3.up * 1.5f, "FROZEN!", QuizBattlePalette.WaterBlue, 1.15f);
+                    }
+                    _hud.Log($"{player.name} freezes {target.name}!");
                 }
             }
             else
             {
                 MatchEngine.ConsumeBonusMove(_state, player.playerId, reward.rewardId);
-                string[] dirs = { "up", "down", "left", "right" };
-                while (player.movementBudget > 0)
-                {
-                    var dir = dirs[rng.Next(dirs.Length)];
-                    var mv = MatchEngine.Move(_state, player.playerId, dir);
-                    if (!mv.ok) break;
-                }
-                _hud.Log($"{player.name} got a bonus move!");
+                _hud.Log($"{player.name} got a bonus move toward the goal!");
             }
+        }
+
+        private PlayerState PickRandomTarget(PlayerState attacker, System.Random rng)
+        {
+            var targets = _state.players.Values.Where(p => p.alive && p.playerId != attacker.playerId).ToList();
+            return targets.Count == 0 ? null : targets[rng.Next(targets.Count)];
         }
 
         private void UpdateVisuals()
@@ -146,6 +184,7 @@ namespace QuizBattle.GameState
                 token.SetHp(player.hp, player.maxHp);
                 if (player.consecutiveCorrect >= 2) token.SetStreak(player.consecutiveCorrect);
                 if (!player.alive) token.SetEliminated();
+                token.SetFrozen(player.frozen);
             }
         }
 

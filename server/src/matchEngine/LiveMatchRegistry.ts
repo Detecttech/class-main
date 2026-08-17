@@ -4,7 +4,7 @@ import { addXp, findStudentProfileById, listUnlockedCharacterIds, unlockCharacte
 import { computeMatchXp, newlyUnlockedCharacters } from "../xp/xpRules";
 import { getCharacter } from "./characters/characterConfig";
 import * as Engine from "./MatchEngine";
-import type { GridPos, MatchState, PlayerState } from "./MatchState";
+import { computeGridHeight, type GridPos, type MatchState, type PlayerState } from "./MatchState";
 
 const QUESTION_TIME_LIMIT_MS = 15_000;
 
@@ -27,7 +27,22 @@ export interface LiveMatch {
   // Each player answers on their own pace — a shared match-wide round timer
   // no longer makes sense, so every player gets their own timeout.
   playerTimers: Map<number, ReturnType<typeof setTimeout>>;
+  // Every player gets the *entire* question bank shuffled into their own random order
+  // at match start, rather than a fresh random draw each time — that way nobody sees a
+  // question repeat until they've been asked every question in the bank once.
+  // Reshuffled (fresh random order, all questions again) once a player exhausts it.
+  playerQuestionOrders: Map<number, Question[]>;
+  playerQuestionCursors: Map<number, number>;
   eventSeq: number;
+}
+
+function shuffled<T>(items: T[]): T[] {
+  const arr = [...items];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
 }
 
 const liveMatches = new Map<number, LiveMatch>();
@@ -45,14 +60,23 @@ export function getOrCreateLiveMatch(matchId: number): LiveMatch {
   const match = findMatchById(matchId);
   if (!match) throw new Error("match_not_found");
 
+  const questions = listQuestionsByBank(match.question_bank_id);
+  // Steps to win track the class's own question bank size (see computeGridHeight) —
+  // maxRounds (the forced progress-tiebreak cap) must stay comfortably above that or a
+  // larger bank could hit the cap before anyone's even able to reach the goal.
+  const gridHeight = computeGridHeight(questions.length);
+  const maxRounds = Math.max(20, (gridHeight - 1) * 2);
+
   const live: LiveMatch = {
     matchId,
-    state: Engine.createMatch(matchId, match.mode),
-    questions: listQuestionsByBank(match.question_bank_id),
+    state: Engine.createMatch(matchId, match.mode, maxRounds, gridHeight),
+    questions,
     lobby: new Map(),
     connToPlayer: new Map(),
     spectatorConnIds: new Set(),
     playerTimers: new Map(),
+    playerQuestionOrders: new Map(),
+    playerQuestionCursors: new Map(),
     eventSeq: 1,
   };
   liveMatches.set(matchId, live);
@@ -90,6 +114,9 @@ export interface SelectCharacterResult {
   error?: string;
 }
 
+// Character picks are not exclusive — with only 4 characters defined and lobbies now
+// supporting up to 8 players, requiring a unique pick per player would permanently
+// lock out half the lobby. Multiple players can play as the same character.
 export function selectCharacter(live: LiveMatch, playerId: number, characterId: string): SelectCharacterResult {
   const entry = live.lobby.get(playerId);
   if (!entry) return { ok: false, error: "not_in_lobby" };
@@ -98,8 +125,6 @@ export function selectCharacter(live: LiveMatch, playerId: number, characterId: 
   } catch {
     return { ok: false, error: "unknown_character" };
   }
-  const taken = [...live.lobby.values()].some((e) => e.playerId !== playerId && e.characterId === characterId);
-  if (taken) return { ok: false, error: "character_taken" };
   entry.characterId = characterId;
   return { ok: true };
 }
@@ -152,6 +177,8 @@ export function startMatchFlow(live: LiveMatch, emit: Emit): StartMatchResult {
   const positions = startPositions(readyPlayers.length, live.state.grid.width);
   readyPlayers.forEach((entry, i) => {
     Engine.addPlayer(live.state, entry.playerId, entry.name, entry.characterId!, entry.team, positions[i]);
+    live.playerQuestionOrders.set(entry.playerId, shuffled(live.questions));
+    live.playerQuestionCursors.set(entry.playerId, 0);
   });
 
   Engine.startMatch(live.state);
@@ -180,14 +207,23 @@ function publicPlayer(p: PlayerState) {
   return { playerId: p.playerId, name: p.name, characterId: p.characterId, team: p.team, hp: p.hp, maxHp: p.maxHp, pos: p.pos, alive: p.alive };
 }
 
-/** Pushes this player their own randomly-drawn question (with replacement —
- * different players naturally end up with different questions, and there's
- * no shared bank cursor to keep in sync) and (re)starts their personal timer. */
+/** Pushes this player the next question from their own shuffled order (assigned once,
+ * whole-bank, at match start in startMatchFlow) and (re)starts their personal timer.
+ * Reshuffles a fresh full-bank order once they've been asked every question in it —
+ * this only matters for very long matches with a small question bank. */
 function pushQuestionToPlayer(live: LiveMatch, playerId: number, emit: Emit) {
   const player = live.state.players.get(playerId);
   if (!player || !player.alive) return;
 
-  const q = live.questions[Math.floor(Math.random() * live.questions.length)];
+  let order = live.playerQuestionOrders.get(playerId);
+  let cursor = live.playerQuestionCursors.get(playerId) ?? 0;
+  if (!order || cursor >= order.length) {
+    order = shuffled(live.questions);
+    cursor = 0;
+    live.playerQuestionOrders.set(playerId, order);
+  }
+  const q = order[cursor];
+  live.playerQuestionCursors.set(playerId, cursor + 1);
   Engine.pushQuestion(live.state, playerId, q.id, q.correct_index);
 
   emit(
@@ -233,6 +269,7 @@ function broadcastPlayerAdvanced(live: LiveMatch, playerId: number, emit: Emit) 
         alive: player.alive,
         streak: player.consecutiveCorrect,
         goalReached: player.goalReached,
+        frozen: player.frozen,
       },
     },
     "broadcast"
@@ -376,6 +413,27 @@ export function handleUseAttack(live: LiveMatch, playerId: number, rewardId: str
     }
   } else {
     emit({ type: "error", payload: { code: result.error, message: "use_attack rejected" } }, playerId);
+  }
+  return result;
+}
+
+export function handleUseFreeze(live: LiveMatch, playerId: number, rewardId: string, targetId: number, emit: Emit) {
+  const result = Engine.useFreeze(live.state, playerId, rewardId, targetId);
+  if (result.ok) {
+    log(live, "use_freeze", { playerId, targetId });
+    emit({ type: "freeze_result", payload: { casterId: playerId, targetId } }, "broadcast");
+  } else {
+    emit({ type: "error", payload: { code: result.error, message: "use_freeze rejected" } }, playerId);
+  }
+  return result;
+}
+
+export function handleWaiveReward(live: LiveMatch, playerId: number, rewardId: string, emit: Emit) {
+  const result = Engine.waiveReward(live.state, playerId, rewardId);
+  if (result.ok) {
+    log(live, "waive_reward", { playerId });
+  } else {
+    emit({ type: "error", payload: { code: result.error, message: "reward_consumed rejected" } }, playerId);
   }
   return result;
 }

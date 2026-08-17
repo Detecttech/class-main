@@ -33,7 +33,17 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   const res = await fetch(`/api${path}`, { ...options, headers });
 
   if (res.status === 401) {
+    // Clearing the token alone isn't enough: nothing here is React state, so no
+    // component re-renders and RequireAuth never notices — the UI stays on the
+    // protected page looking logged-in while every request from then on silently
+    // fails with "Missing bearer token". Force back to a real login state instead.
+    const wasLoggedIn = Boolean(token);
     clearToken();
+    localStorage.removeItem("quizbattle_teacher_info");
+    if (wasLoggedIn && !path.startsWith("/auth/")) {
+      window.location.hash = "#/login";
+      window.location.reload();
+    }
   }
 
   if (res.status === 204) {

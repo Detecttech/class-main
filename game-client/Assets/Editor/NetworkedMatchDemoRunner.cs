@@ -17,7 +17,7 @@ using UnityEngine;
 /// WsClients and one "teacher" WsClient talk to a REAL running Node server (see
 /// server/bootstrap-match.mjs, run separately to produce D:/temp/match-bootstrap.json)
 /// through the full lobby -> character-select -> ready -> start -> question -> answer ->
-/// reward -> attack -> round-resolved -> match-end flow. MatchStateStore + NetworkedArenaView
+/// reward -> attack -> player-advanced -> match-end flow. MatchStateStore + NetworkedArenaView
 /// render the result using the same visual layer as the Phase 1 local demo, and a
 /// screenshot is captured so the render can be inspected, not just asserted on.
 public static class NetworkedMatchDemoRunner
@@ -224,12 +224,7 @@ public static class NetworkedMatchDemoRunner
 
     private static void ReplayFinalState(GridController grid, ArenaRig rig, Dictionary<string, CharacterVisual> visuals, MatchStateStore store)
     {
-        var zones = new List<QuizBattle.GameState.MockEngine.ZoneDef>();
-        foreach (var z in store.Zones)
-        {
-            zones.Add(new QuizBattle.GameState.MockEngine.ZoneDef { id = z.Id, pos = new QuizBattle.GameState.MockEngine.GridPos(z.Pos.X, z.Pos.Y) });
-        }
-        grid.BuildGrid(store.GridWidth, store.GridHeight, zones);
+        grid.BuildGrid(store.GridWidth, store.GridHeight, store.GoalRow);
 
         ArenaEnvironment.FrameGrid(rig, grid, store.GridWidth, store.GridHeight);
 

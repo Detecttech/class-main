@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using System.Threading.Tasks;
+using QuizBattle.Arena;
 using QuizBattle.Bootstrap;
 using QuizBattle.GameState;
 using QuizBattle.Networking;
@@ -42,7 +43,7 @@ namespace QuizBattle.UI.TeacherDashboard
         {
             var canvas = UiFactory.CreateCanvas();
 
-            _loginPanel = UiFactory.CreatePanel(canvas.transform, "LoginPanel", new Vector2(0.5f, 0.5f), new Vector2(420, 320), new Color(0.1f, 0.1f, 0.18f, 0.95f)).gameObject;
+            _loginPanel = UiFactory.CreatePanel(canvas.transform, "LoginPanel", new Vector2(0.5f, 0.5f), new Vector2(420, 320), new Color(QuizBattlePalette.PanelDeep.r, QuizBattlePalette.PanelDeep.g, QuizBattlePalette.PanelDeep.b, 0.95f)).gameObject;
             UiFactory.CreateText(_loginPanel.transform, "Title", new Vector2(0.5f, 0.85f), new Vector2(380, 50), 26).text = "Teacher Login";
             _usernameField = UiFactory.CreateInputField(_loginPanel.transform, "UsernameField", new Vector2(0.5f, 0.65f), new Vector2(320, 50), "Username");
             _passwordField = UiFactory.CreateInputField(_loginPanel.transform, "PasswordField", new Vector2(0.5f, 0.52f), new Vector2(320, 50), "Password");
@@ -51,7 +52,7 @@ namespace QuizBattle.UI.TeacherDashboard
             loginButton.onClick.AddListener(OnLoginClicked);
             _loginStatusText = UiFactory.CreateText(_loginPanel.transform, "Status", new Vector2(0.5f, 0.18f), new Vector2(380, 60), 16);
 
-            _dashboardPanel = UiFactory.CreatePanel(canvas.transform, "DashboardPanel", new Vector2(0.5f, 0.5f), new Vector2(600, 500), new Color(0.1f, 0.1f, 0.18f, 0.95f)).gameObject;
+            _dashboardPanel = UiFactory.CreatePanel(canvas.transform, "DashboardPanel", new Vector2(0.5f, 0.5f), new Vector2(600, 500), new Color(QuizBattlePalette.PanelDeep.r, QuizBattlePalette.PanelDeep.g, QuizBattlePalette.PanelDeep.b, 0.95f)).gameObject;
             UiFactory.CreateText(_dashboardPanel.transform, "Title", new Vector2(0.5f, 0.93f), new Vector2(560, 50), 26).text = "Live Match Monitor";
             _matchIdField = UiFactory.CreateInputField(_dashboardPanel.transform, "MatchIdField", new Vector2(0.35f, 0.83f), new Vector2(220, 45), "Match ID");
             var connectButton = UiFactory.CreateButton(_dashboardPanel.transform, "ConnectButton", new Vector2(0.72f, 0.83f), new Vector2(160, 45), "Watch");
@@ -124,7 +125,7 @@ namespace QuizBattle.UI.TeacherDashboard
             void OnAck(Envelope env) { if (env.Type == "hello_ack") acked = true; }
             client.MessageReceived += OnAck;
             client.Send("hello", new { role = "teacher", token = SessionManager.AuthToken });
-            await WaitUntil(client, () => acked, 5000);
+            await WsClient.WaitUntil(client, () => acked, 5000);
             client.MessageReceived -= OnAck;
 
             if (!acked)
@@ -145,7 +146,7 @@ namespace QuizBattle.UI.TeacherDashboard
 
         private void OnDashboardUpdated(LiveDashboardPayload dashboard)
         {
-            _dashboardStatusText.text = $"Status: {dashboard.Status} — Round {dashboard.Round}";
+            _dashboardStatusText.text = $"Status: {dashboard.Status}";
             var sb = new StringBuilder();
             foreach (var p in dashboard.Players)
             {
@@ -162,16 +163,6 @@ namespace QuizBattle.UI.TeacherDashboard
                 sb.AppendLine($"{p.name} — {(string.IsNullOrEmpty(p.characterId) ? "no character" : p.characterId)} — {(p.ready ? "Ready" : "Not ready")}");
             }
             _playerListText.text = sb.ToString();
-        }
-
-        private static async Task WaitUntil(WsClient client, Func<bool> condition, int timeoutMs)
-        {
-            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            while (!condition() && DateTime.UtcNow < deadline)
-            {
-                client.PumpMessages();
-                await Task.Delay(50);
-            }
         }
     }
 }

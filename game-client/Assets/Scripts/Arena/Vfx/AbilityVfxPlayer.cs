@@ -32,9 +32,12 @@ namespace QuizBattle.Arena.Vfx
                 case "vfx_life_drain":
                     PlayLifeDrain(from, to, spawned);
                     break;
+                case "vfx_freeze":
+                    PlayFreeze(from, to, spawned);
+                    break;
                 case "vfx_basic_strike":
                 default:
-                    PlayBasicStrike(to, spawned);
+                    PlayBasicStrike(from, to, spawned);
                     break;
             }
 
@@ -71,9 +74,21 @@ namespace QuizBattle.Arena.Vfx
             Track(ParticleFactory.Burst(to + Vector3.up * 0.5f, color, size: 0.2f, count: 12, speed: 1.4f, lifetime: 0.4f), spawned);
         }
 
-        private static void PlayBasicStrike(Vector3 at, List<ParticleSystem> spawned)
+        private static void PlayFreeze(Vector3 from, Vector3 to, List<ParticleSystem> spawned)
         {
-            Track(ParticleFactory.Burst(at + Vector3.up * 0.4f, new Color(1f, 0.9f, 0.6f), size: 0.16f, count: 12, speed: 1.8f, lifetime: 0.3f), spawned);
+            var color = new Color(0.55f, 0.9f, 1f);
+            Track(ParticleFactory.Streaks(from + Vector3.up * 0.4f, to + Vector3.up * 0.4f, color, duration: 0.28f, count: 10), spawned);
+            Track(ParticleFactory.RingWave(to, color, startRadius: 0.1f, endRadius: 0.45f, duration: 0.4f, upright: false), spawned);
+        }
+
+        private static void PlayBasicStrike(Vector3 from, Vector3 to, List<ParticleSystem> spawned)
+        {
+            var color = new Color(1f, 0.9f, 0.6f);
+            // Aegis/Zephyr have no active ability of their own, so every attack_choice
+            // they use falls back to this — it needs the same attacker-to-target travel
+            // as fireball/life_drain, or most attacks in a match would show no motion at all.
+            Track(ParticleFactory.Streaks(from + Vector3.up * 0.4f, to + Vector3.up * 0.4f, color, duration: 0.22f, count: 8), spawned);
+            Track(ParticleFactory.Burst(to + Vector3.up * 0.4f, color, size: 0.16f, count: 12, speed: 1.8f, lifetime: 0.3f), spawned);
         }
 
         private static void PlayEliminated(Vector3 at, List<ParticleSystem> spawned)

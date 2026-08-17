@@ -18,7 +18,7 @@ MonoBehaviour:
   archetype: 1
   accentColor: {r: 1, g: 0.75, b: 0.2, a: 1}
   emissionColor: {r: 1, g: 0.55, b: 0.1, a: 1}
-  maxHp: 60
+  maxHp: 45
   moveRange: 1
   abilityId: fireball
   abilityName: Fireball

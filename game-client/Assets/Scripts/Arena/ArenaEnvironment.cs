@@ -44,41 +44,40 @@ namespace QuizBattle.Arena
         public static void FrameGrid(ArenaRig rig, GridController grid, int width, int height)
         {
             var camera = rig.Camera;
-            Vector3 center = grid.GridCenter();
-
-            float depth = height * grid.tileSize;
-            float horiz = width * grid.tileSize;
+            float centerX = (width - 1) * 0.5f;
+            float centerZ = (height - 1) * 0.5f;
 
             float pitchRad = Pitch * Mathf.Deg2Rad;
             float fovRad = camera.fieldOfView * Mathf.Deg2Rad;
             float aspect = camera.aspect > 0f ? camera.aspect : 16f / 9f;
 
-            const float margin = 1.5f; // token height + breathing room
-            float vNeed = depth * Mathf.Cos(pitchRad) + margin;
-            float hNeed = horiz + margin;
+            // We want the entire playable board + margins (from z = -1.2 to z = height + 0.8)
+            // to map comfortably into the viewport vertical range [0.06, 0.68] (total span 0.62 of screen).
+            float zSpan = height + 2.2f;
+            float xSpan = width + 2.4f;
 
-            // vNeed must fit within BoardScreenFraction of the vertical FOV, not the
-            // whole frame — so zoom out enough that the reserved bottom band alone is
-            // big enough, rather than fitting vNeed to the full frame and then shifting
-            // it partly off-screen.
-            float distV = (vNeed / BoardScreenFraction) * 0.5f / Mathf.Tan(fovRad * 0.5f);
-            float horizFovRad = 2f * Mathf.Atan(Mathf.Tan(fovRad * 0.5f) * aspect);
-            float distH = (hNeed * 0.5f) / Mathf.Tan(horizFovRad * 0.5f);
+            float targetNdcHeight = 1.25f;
+            float distV = (zSpan * Mathf.Sin(pitchRad)) / (targetNdcHeight * Mathf.Tan(fovRad * 0.5f));
+
+            float targetNdcWidth = 1.50f;
+            float distH = xSpan / (targetNdcWidth * Mathf.Tan(fovRad * 0.5f) * aspect);
+
             float dist = Mathf.Max(distV, distH);
+
+            // Aim the camera so that the bottom start line (z = 0) is well above the bottom screen edge (viewport y ≈ 0.08),
+            // and the top goal line (z = height - 1) is below the HUD (viewport y ≈ 0.55 .. 0.65).
+            float targetNdcMidY = -0.28f;
+            float zAimOffset = (dist * (-targetNdcMidY) * Mathf.Tan(fovRad * 0.5f)) / Mathf.Sin(pitchRad);
+            float aimZ = centerZ + zAimOffset;
 
             var rotation = Quaternion.Euler(Pitch, 0f, 0f);
             Vector3 forward = rotation * Vector3.forward;
-            Vector3 position = center - forward * dist;
-
-            // Raising the camera without re-aiming shifts the previously-centered look-at
-            // point toward the bottom of the frame — exactly what we want here.
-            float viewHeightAtDist = 2f * dist * Mathf.Tan(fovRad * 0.5f);
-            float shiftFraction = 0.5f - BoardScreenFraction * 0.5f;
-            position += (rotation * Vector3.up) * (viewHeightAtDist * shiftFraction);
+            Vector3 lookAtPoint = new Vector3(centerX, 0f, aimZ);
+            Vector3 position = lookAtPoint - forward * dist;
 
             camera.transform.SetPositionAndRotation(position, rotation);
 
-            foreach (var label in Object.FindObjectsByType<BillboardLabel>(FindObjectsSortMode.None))
+            foreach (var label in Object.FindObjectsByType<BillboardLabel>(FindObjectsInactive.Exclude))
                 label.Align(camera);
         }
 
@@ -95,7 +94,10 @@ namespace QuizBattle.Arena
             camera.orthographic = false;
             camera.fieldOfView = FieldOfView;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = backgroundColor;
+            // Default to Clash Royale bright sky horizon if a dark fallback was passed
+            camera.backgroundColor = (backgroundColor.r < 0.2f && backgroundColor.g < 0.2f && backgroundColor.b < 0.2f)
+                ? QuizBattlePalette.SkyHorizon
+                : backgroundColor;
 
             var camData = camera.GetUniversalAdditionalCameraData();
             camData.renderPostProcessing = true;
@@ -118,11 +120,11 @@ namespace QuizBattle.Arena
                 key.type = LightType.Directional;
             }
 
-            key.color = new Color(1f, 0.92f, 0.78f); // warmer, sunlit — Clash-Royale-style key light
-            key.intensity = 1.25f;
+            key.color = new Color(1.00f, 0.94f, 0.84f); // warm sunlit key light
+            key.intensity = 1.35f;
             key.shadows = LightShadows.Soft;
-            key.shadowStrength = 0.65f; // partial-strength colored shadows read as stylized, not grim
-            key.transform.rotation = Quaternion.Euler(50f, -35f, 0f);
+            key.shadowStrength = 0.68f; // crisp stylized cartoon shadow
+            key.transform.rotation = Quaternion.Euler(52f, -35f, 0f);
 
             RenderSettings.sun = key;
             return key;
@@ -133,22 +135,20 @@ namespace QuizBattle.Arena
             var go = new GameObject("Fill Light");
             var fill = go.AddComponent<Light>();
             fill.type = LightType.Directional;
-            fill.color = new Color(0.55f, 0.70f, 1f);
-            fill.intensity = 0.3f; // trimmed slightly so it doesn't wash out the warmer floor/key light
+            fill.color = new Color(0.48f, 0.65f, 0.95f); // saturated sky fill
+            fill.intensity = 0.38f;
             fill.shadows = LightShadows.None;
-            fill.transform.rotation = Quaternion.Euler(35f, 145f, 0f);
+            fill.transform.rotation = Quaternion.Euler(38f, 145f, 0f);
             return fill;
         }
 
         private static void ConfigureAmbient()
         {
-            // Required so the headless demo runners (empty scene, no skybox) don't render
-            // pure-black ambient — Trilight gives a deliberate cool-sky/warm-ground look
-            // that also benefits the real Arena scene.
+            // Trilight with cool sky, neutral equator, and lush grass ground bounce
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.42f, 0.44f, 0.56f);
-            RenderSettings.ambientEquatorColor = new Color(0.30f, 0.26f, 0.28f);
-            RenderSettings.ambientGroundColor = new Color(0.22f, 0.17f, 0.14f); // warmer bounce off the sand/terracotta floor
+            RenderSettings.ambientSkyColor = new Color(0.45f, 0.58f, 0.82f);
+            RenderSettings.ambientEquatorColor = new Color(0.32f, 0.42f, 0.35f);
+            RenderSettings.ambientGroundColor = new Color(0.24f, 0.44f, 0.18f); // lush green grass bounce
             RenderSettings.ambientIntensity = 1f;
         }
 
@@ -161,21 +161,22 @@ namespace QuizBattle.Arena
 
             var bloom = profile.Add<Bloom>(true);
             bloom.threshold.value = 1.0f;
-            bloom.intensity.value = 0.5f; // trimmed slightly to avoid blowout from the higher saturation below
-            bloom.scatter.value = 0.7f;
+            bloom.intensity.value = 0.65f;
+            bloom.scatter.value = 0.75f;
             bloom.downscale.value = BloomDownscaleMode.Half;
             bloom.maxIterations.value = 4;
 
             var tonemapping = profile.Add<Tonemapping>(true);
-            tonemapping.mode.value = TonemappingMode.Neutral; // ACES would crush the saturation push below
+            tonemapping.mode.value = TonemappingMode.Neutral;
 
             var colorAdjustments = profile.Add<ColorAdjustments>(true);
-            // Clash-Royale-style punchy/saturated toon look.
-            colorAdjustments.saturation.value = 24f;
-            colorAdjustments.contrast.value = 11f;
+            // Clash-Royale punchy/saturated toon look
+            colorAdjustments.saturation.value = 28f;
+            colorAdjustments.contrast.value = 14f;
+            colorAdjustments.postExposure.value = 0.12f;
 
             var vignette = profile.Add<Vignette>(true);
-            vignette.intensity.value = 0.13f; // CR barely vignettes; a heavy vignette fights the saturation push
+            vignette.intensity.value = 0.12f;
             vignette.smoothness.value = 0.6f;
 
             var volumeObj = new GameObject("Post Volume");

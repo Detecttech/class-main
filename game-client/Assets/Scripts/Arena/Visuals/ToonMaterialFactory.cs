@@ -10,24 +10,31 @@ namespace QuizBattle.Arena.Visuals
         public Color ShadowTint;
         public Color RimColor;
         public float RimIntensity;
+        public float RimPower;
+        public Color SpecTint;
+        public float Gloss;
+        public float SpecIntensity;
         public Color EmissionColor;
         public float EmissionIntensity;
         public Color OutlineColor;
         public float OutlineWidth;
         public bool OutlineEnabled;
 
-        // Chunkier/darker outline and a glossier rim than the original defaults —
-        // reads better at the arena's 32-degree FOV and matches a Clash-Royale-style
-        // toy/plastic look.
+        // Chunkier/darker outline, glossy toy specular, and a vibrant rim highlight —
+        // matches the signature Clash-Royale plastic/resin toy look.
         public static ToonStyle Default => new ToonStyle
         {
             ShadowTint = QuizBattlePalette.ShadowTint,
             RimColor = Color.white,
-            RimIntensity = 0.75f,
+            RimIntensity = 0.85f,
+            RimPower = 2.5f,
+            SpecTint = Color.white,
+            Gloss = 36f,
+            SpecIntensity = 0.65f,
             EmissionColor = Color.black,
             EmissionIntensity = 0f,
             OutlineColor = QuizBattlePalette.OutlineColor,
-            OutlineWidth = 2.1f,
+            OutlineWidth = 2.2f,
             OutlineEnabled = true,
         };
     }
@@ -129,6 +136,10 @@ namespace QuizBattle.Arena.Visuals
             mat.SetColor("_ShadowTint", style.ShadowTint);
             mat.SetColor("_RimColor", style.RimColor);
             mat.SetFloat("_RimIntensity", style.RimIntensity);
+            mat.SetFloat("_RimPower", style.RimPower > 0.01f ? style.RimPower : 3f);
+            mat.SetColor("_SpecTint", style.SpecTint != default ? style.SpecTint : Color.white);
+            mat.SetFloat("_Gloss", style.Gloss > 0.01f ? style.Gloss : 36f);
+            mat.SetFloat("_SpecIntensity", style.SpecIntensity);
             mat.SetColor("_EmissionColor", style.EmissionColor);
             mat.SetFloat("_EmissionIntensity", style.EmissionIntensity);
             mat.SetColor("_OutlineColor", style.OutlineColor);
@@ -161,6 +172,6 @@ namespace QuizBattle.Arena.Visuals
         }
 
         private static string ToonKey(Color baseColor, ToonStyle style, Texture2D mainTex, Vector4 tiling) =>
-            $"toon|{baseColor}|{style.ShadowTint}|{style.RimColor}|{style.RimIntensity}|{style.EmissionColor}|{style.EmissionIntensity}|{style.OutlineColor}|{style.OutlineWidth}|{style.OutlineEnabled}|{(mainTex != null ? mainTex.GetEntityId() : default)}|{tiling}";
+            $"toon|{baseColor}|{style.ShadowTint}|{style.RimColor}|{style.RimIntensity}|{style.RimPower}|{style.SpecTint}|{style.Gloss}|{style.SpecIntensity}|{style.EmissionColor}|{style.EmissionIntensity}|{style.OutlineColor}|{style.OutlineWidth}|{style.OutlineEnabled}|{(mainTex != null ? mainTex.GetEntityId() : default)}|{tiling}";
     }
 }
