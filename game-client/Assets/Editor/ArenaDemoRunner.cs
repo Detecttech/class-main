@@ -22,8 +22,28 @@ public static class ArenaDemoRunner
         allPassed &= RunScenario("race-path", seed: 1, maxRounds: 20, screenshotName: "arena-demo-race-path.png");
         allPassed &= RunScenario("progress-tiebreak-path", seed: 1, maxRounds: 2, screenshotName: "arena-demo-progress-tiebreak-path.png");
         allPassed &= RunVfxShowcase();
+        allPassed &= RunCharacterSelectShowcase();
 
         EditorApplication.Exit(allPassed ? 0 : 1);
+    }
+
+    private static bool RunCharacterSelectShowcase()
+    {
+        EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        var go = new GameObject("CharacterSelectController");
+        go.AddComponent<QuizBattle.UI.CharacterSelect.CharacterSelectScreen>();
+
+        var cam = Camera.main;
+        if (cam == null)
+        {
+            var camObj = new GameObject("MainCamera");
+            cam = camObj.AddComponent<Camera>();
+            cam.tag = "MainCamera";
+            camObj.transform.position = new Vector3(0, 0, -10f);
+        }
+
+        CaptureScreenshot("character-select-showcase.png");
+        return true;
     }
 
     private static bool RunScenario(string label, int seed, int maxRounds, string screenshotName)
@@ -79,6 +99,13 @@ public static class ArenaDemoRunner
         grid.BuildGrid(width, height, height - 1);
         ArenaEnvironment.FrameGrid(rig, grid, width, height);
 
+        var defs = LoadCharacterDefs();
+        if (defs.Count > 0)
+        {
+            var frozenToken = CharacterToken.Create(defs[0].displayName, CharacterVisual.From(defs[0]), grid.TileToWorldPos(3, 3));
+            frozenToken.SetFrozen(true);
+        }
+
         var spawned = new List<ParticleSystem>();
         spawned.AddRange(AbilityVfxPlayer.Play("vfx_fireball", grid.TileToWorldPos(1, 1), grid.TileToWorldPos(2, 2), eliminated: false));
         spawned.AddRange(AbilityVfxPlayer.Play("vfx_shield_shimmer", grid.TileToWorldPos(4, 1), grid.TileToWorldPos(4, 1), eliminated: false));
@@ -91,7 +118,7 @@ public static class ArenaDemoRunner
 
         FloatingCombatText.Spawn(grid.TileToWorldPos(2, 2) + Vector3.up * 1.5f, "-25 HP CRIT!", QuizBattlePalette.RoofTilesRed, 1.3f);
         FloatingCombatText.Spawn(grid.TileToWorldPos(4, 1) + Vector3.up * 1.5f, "SHIELDED!", QuizBattlePalette.GoldTrim, 1.1f);
-        FloatingCombatText.Spawn(grid.TileToWorldPos(1, 3) + Vector3.up * 1.5f, "FROZEN!", QuizBattlePalette.WaterBlue, 1.2f);
+        FloatingCombatText.Spawn(grid.TileToWorldPos(3, 3) + Vector3.up * 1.5f, "FROZEN!", QuizBattlePalette.WaterBlue, 1.2f);
 
         Debug.Log($"[ArenaDemoRunner:vfx-showcase] spawned {spawned.Count} particle systems across 6 ability tags");
         CaptureScreenshot("vfx-showcase.png");

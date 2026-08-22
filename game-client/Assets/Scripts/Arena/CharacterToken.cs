@@ -76,18 +76,49 @@ namespace QuizBattle.Arena
             return token;
         }
 
-        /// A slowly pulsing icy ring, layered just above the archetype's own ground disc
-        /// — hidden until SetFrozen(true), so it costs nothing when unused.
+        /// 3D Translucent Frosted Ice Block with crystal spikes and glowing frost ring
+        /// that encases the character completely when frozen.
         private static GameObject CreateFrozenIndicator(Transform parent)
         {
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            go.name = "FrozenRing";
+            var go = new GameObject("FrozenIceBlock");
             go.transform.SetParent(parent, false);
-            go.transform.localPosition = new Vector3(0f, 0.05f, 0f);
-            go.transform.localScale = new Vector3(0.95f, 0.02f, 0.95f);
-            Object.Destroy(go.GetComponent<Collider>());
-            go.GetComponent<Renderer>().sharedMaterial =
-                ToonMaterialFactory.Glow(new Color(0.55f, 0.9f, 1f), intensity: 1.2f, softEdge: 0.3f, pulseSpeed: 3f, pulseAmount: 0.4f);
+            go.transform.localPosition = Vector3.zero;
+
+            var iceMat = ToonMaterialFactory.Instance(new Color(0.65f, 0.92f, 1.0f, 0.75f), ToonStyle.IceBlockStyle);
+
+            // Main translucent ice block encasing the character
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = "MainIceCube";
+            cube.transform.SetParent(go.transform, false);
+            cube.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+            cube.transform.localScale = new Vector3(0.95f, 1.30f, 0.95f);
+            Object.Destroy(cube.GetComponent<Collider>());
+            cube.GetComponent<Renderer>().sharedMaterial = iceMat;
+
+            // 4 corner crystal spikes
+            float[] xz = { -0.45f, 0.45f };
+            for (int i = 0; i < 4; i++)
+            {
+                var spike = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                spike.name = $"IceSpike_{i}";
+                spike.transform.SetParent(go.transform, false);
+                spike.transform.localPosition = new Vector3(xz[i % 2], 0.65f, xz[i / 2]);
+                spike.transform.localScale = new Vector3(0.18f, 0.75f, 0.18f);
+                spike.transform.localRotation = Quaternion.Euler((i % 2 == 0 ? 12f : -12f), 0f, (i / 2 == 0 ? 12f : -12f));
+                Object.Destroy(spike.GetComponent<Collider>());
+                spike.GetComponent<Renderer>().sharedMaterial = iceMat;
+            }
+
+            // Glowing frosted base disc
+            var frostRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            frostRing.name = "FrostRing";
+            frostRing.transform.SetParent(go.transform, false);
+            frostRing.transform.localPosition = new Vector3(0f, 0.04f, 0f);
+            frostRing.transform.localScale = new Vector3(1.25f, 0.03f, 1.25f);
+            Object.Destroy(frostRing.GetComponent<Collider>());
+            frostRing.GetComponent<Renderer>().sharedMaterial =
+                ToonMaterialFactory.Glow(new Color(0.4f, 0.85f, 1f), intensity: 1.5f, softEdge: 0.25f, pulseSpeed: 2f, pulseAmount: 0.4f);
+
             go.SetActive(false);
             return go;
         }
@@ -206,6 +237,7 @@ namespace QuizBattle.Arena
         public void SetFrozen(bool frozen)
         {
             if (_frozenIndicator != null) _frozenIndicator.SetActive(frozen);
+            if (_animator != null) _animator.SetPaused(frozen);
         }
 
         /// Animates the juicy parabolic hop from current position to worldPos with

@@ -1,0 +1,31 @@
+.git
+.github
+.vscode
+.claude
+.idea
+
+# Unity Editor caches and working directories
+game-client/Library
+game-client/Temp
+game-client/obj
+game-client/Logs
+game-client/MemoryCaptures
+game-client/UserSettings
+game-client/.utmp
+game-client/build
+game-client/building
+
+# Node modules & build artifacts (built inside Docker)
+node_modules
+server/node_modules
+server/dist
+server/web-portal/node_modules
+server/web-portal/dist
+server/data/*.db
+server/data/*.db-journal
+server/data/*.db-wal
+server/data/*.db-shm
+
+# Log files
+*.log
+*.exitcode

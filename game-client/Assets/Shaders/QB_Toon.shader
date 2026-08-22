@@ -230,13 +230,15 @@ Shader "QuizBattle/Toon"
 
                 half rim = pow(1.0 - saturate(dot(normalWS, viewDirWS)), _RimPower);
                 rim *= smoothstep(_RimThreshold - 0.15, _RimThreshold + 0.15, rim);
-                rim *= ndl; // only on the lit side
+                // Wrap rim light around the silhouette (studio backlight) with lit-side boost
+                rim *= (0.45 + 0.55 * ndl);
                 half3 rimResult = rim * _RimColor.rgb * _RimIntensity;
 
                 half3 halfDir = normalize(mainLight.direction + viewDirWS);
                 half ndh = saturate(dot(normalWS, halfDir));
-                half specRaw = pow(ndh, _Gloss) * step(0.001, ndl);
-                half specBand = smoothstep(0.5, 0.55, specRaw);
+                half specRaw = pow(ndh, _Gloss);
+                // Soft glossy toy specular band for plastic/resin cartoon look
+                half specBand = smoothstep(0.20, 0.45, specRaw) * step(0.001, ndl);
                 half3 specResult = specBand * _SpecTint.rgb * _SpecIntensity;
 
                 half3 additional = 0;

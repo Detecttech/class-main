@@ -116,26 +116,78 @@ namespace QuizBattle.UI.CharacterSelect
             _statusText.color = QuizBattlePalette.CreamText;
         }
 
-        /// One shared directional light for every staged character — this screen has no
-        /// arena/ArenaEnvironment, so QB_Toon's main-light-driven cel shading would
-        /// otherwise render pitch black.
+        /// 3-Point Studio Lighting Rig giving characters vivid specular highlights and rim backlights
         private static void BuildPreviewLight()
         {
-            var light = new GameObject("PreviewLight").AddComponent<Light>();
-            light.type = LightType.Directional;
-            light.color = new Color(1f, 0.92f, 0.78f);
-            light.intensity = 1.2f;
-            light.shadows = LightShadows.None;
-            light.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
+            // Key Light (warm gold from front-right)
+            var keyLight = new GameObject("PreviewKeyLight").AddComponent<Light>();
+            keyLight.type = LightType.Directional;
+            keyLight.color = new Color(1f, 0.95f, 0.85f);
+            keyLight.intensity = 1.45f;
+            keyLight.shadows = LightShadows.None;
+            keyLight.transform.rotation = Quaternion.Euler(35f, -35f, 0f);
+
+            // Rim / Back Light (cool cyan backlight from behind-left for crisp rim highlights)
+            var rimLight = new GameObject("PreviewRimLight").AddComponent<Light>();
+            rimLight.type = LightType.Directional;
+            rimLight.color = new Color(0.65f, 0.90f, 1f);
+            rimLight.intensity = 2.2f;
+            rimLight.shadows = LightShadows.None;
+            rimLight.transform.rotation = Quaternion.Euler(-35f, 145f, 0f);
+
+            // Fill Light (soft sky fill from front-left)
+            var fillLight = new GameObject("PreviewFillLight").AddComponent<Light>();
+            fillLight.type = LightType.Directional;
+            fillLight.color = new Color(0.85f, 0.88f, 1f);
+            fillLight.intensity = 0.75f;
+            fillLight.shadows = LightShadows.None;
+            fillLight.transform.rotation = Quaternion.Euler(15f, 45f, 0f);
 
             RenderSettings.ambientMode = AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.32f, 0.30f, 0.36f);
+            RenderSettings.ambientLight = new Color(0.42f, 0.40f, 0.48f);
         }
 
         private static Transform BuildStagedCharacter(CharacterDefinitionSO def, Vector3 stagePos)
         {
             var root = new GameObject($"Preview_{def.characterId}");
             root.transform.position = stagePos;
+
+            // 3D Golden Turntable Pedestal
+            var pedestal = new GameObject("Pedestal");
+            pedestal.transform.SetParent(root.transform, false);
+
+            var goldMat = ToonMaterialFactory.Toon(QuizBattlePalette.GoldTrim, ToonStyle.GlossyToy);
+            var slateMat = ToonMaterialFactory.Toon(new Color(0.12f, 0.14f, 0.20f), ToonStyle.GlossyToy);
+
+            // Outer gold base
+            var baseCyl = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            baseCyl.name = "GoldBase";
+            baseCyl.transform.SetParent(pedestal.transform, false);
+            baseCyl.transform.localPosition = new Vector3(0f, -0.04f, 0f);
+            baseCyl.transform.localScale = new Vector3(1.35f, 0.04f, 1.35f);
+            Destroy(baseCyl.GetComponent<Collider>());
+            baseCyl.GetComponent<Renderer>().sharedMaterial = goldMat;
+
+            // Slate disc
+            var slateCyl = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            slateCyl.name = "SlateDisc";
+            slateCyl.transform.SetParent(pedestal.transform, false);
+            slateCyl.transform.localPosition = new Vector3(0f, 0.01f, 0f);
+            slateCyl.transform.localScale = new Vector3(1.15f, 0.03f, 1.15f);
+            Destroy(slateCyl.GetComponent<Collider>());
+            slateCyl.GetComponent<Renderer>().sharedMaterial = slateMat;
+
+            // Glowing archetype power ring
+            var glowRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            glowRing.name = "GlowRing";
+            glowRing.transform.SetParent(pedestal.transform, false);
+            glowRing.transform.localPosition = new Vector3(0f, 0.03f, 0f);
+            glowRing.transform.localScale = new Vector3(1.05f, 0.015f, 1.05f);
+            Destroy(glowRing.GetComponent<Collider>());
+            glowRing.GetComponent<Renderer>().sharedMaterial =
+                ToonMaterialFactory.Glow(def.placeholderColor, intensity: 1.6f, softEdge: 0.25f, pulseSpeed: 2f, pulseAmount: 0.35f);
+
+            // Character model on the pedestal
             CharacterVisualBuilder.Build(CharacterVisual.From(def), root.transform);
             return root.transform;
         }
@@ -145,44 +197,43 @@ namespace QuizBattle.UI.CharacterSelect
             var camObj = new GameObject("PreviewCamera");
             var cam = camObj.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = QuizBattlePalette.PanelFill;
-            cam.fieldOfView = 24f;
+            cam.backgroundColor = new Color(0.10f, 0.12f, 0.22f); // Deep Royal Navy
+            cam.fieldOfView = 25f;
             cam.nearClipPlane = 0.05f;
             cam.targetTexture = target;
-            cam.transform.position = stagePos + new Vector3(0f, 0.85f, -2.6f);
-            cam.transform.LookAt(stagePos + new Vector3(0f, 0.62f, 0f));
+            cam.transform.position = stagePos + new Vector3(0f, 0.90f, -2.4f);
+            cam.transform.LookAt(stagePos + new Vector3(0f, 0.60f, 0f));
         }
 
         private Button BuildCharacterCard(Transform parent, CharacterDefinitionSO def, Vector2 anchor, RenderTexture preview)
         {
-            var (frame, fill) = UiFactory.CreateBannerPanel(parent, $"Char_{def.characterId}", anchor, new Vector2(CardWidth, CardHeight), QuizBattlePalette.PanelFill);
+            var (frame, innerCard) = UiFactory.CreatePlacardPanel(parent, $"Char_{def.characterId}", anchor, new Vector2(CardWidth, CardHeight), QuizBattlePalette.PanelDeep);
 
             var button = frame.gameObject.AddComponent<Button>();
-            button.targetGraphic = fill;
+            button.targetGraphic = innerCard;
             var colors = button.colors;
             colors.highlightedColor = QuizBattlePalette.PanelHighlighted;
             colors.pressedColor = QuizBattlePalette.PanelPressed;
             button.colors = colors;
 
-            var portraitRect = UiFactory.CreateRect(frame, "Portrait", new Vector2(0.5f, 0.5f), new Vector2(210, 170), new Vector2(0, 65));
+            // Character 3D RawImage Portrait
+            var portraitRect = UiFactory.CreateRect(frame, "Portrait", new Vector2(0.5f, 0.5f), new Vector2(210, 165), new Vector2(0, 68));
             var portrait = portraitRect.gameObject.AddComponent<RawImage>();
             portrait.texture = preview;
             portrait.raycastTarget = false;
 
-            // Colored accent strip behind the name — the one place per-character identity
-            // (def.placeholderColor) shows through the otherwise uniform card chrome.
-            var accentRect = UiFactory.CreateRect(frame, "Accent", new Vector2(0.5f, 0.5f), new Vector2(210, 32), new Vector2(0, -39));
-            var accent = accentRect.gameObject.AddComponent<Image>();
-            accent.color = def.placeholderColor;
-            accent.raycastTarget = false;
-
-            var name = UiFactory.CreateText(frame, "Name", new Vector2(0.5f, 0.5f), new Vector2(210, 28), 20, new Vector2(0, -39));
+            // Archetype Banner Ribbon behind name
+            var (bannerRect, _) = UiFactory.CreateBannerPanel(frame, "NameBanner", new Vector2(0.5f, 0.5f), new Vector2(210, 32), def.placeholderColor, new Vector2(0, -32));
+            var name = UiFactory.CreateText(bannerRect, "Name", new Vector2(0.5f, 0.5f), new Vector2(200, 26), 18);
             name.text = def.displayName;
             name.fontStyle = FontStyles.Bold;
-            name.color = Color.black;
+            name.color = Color.white;
+            name.outlineWidth = 0.22f;
+            name.outlineColor = Color.black;
 
-            var ability = UiFactory.CreateText(frame, "Ability", new Vector2(0.5f, 0.5f), new Vector2(210, 100), 14, new Vector2(0, -108));
-            ability.text = $"{def.abilityName}\n{def.abilityDescription}";
+            // Ability Description Box
+            var ability = UiFactory.CreateText(frame, "Ability", new Vector2(0.5f, 0.5f), new Vector2(210, 95), 13, new Vector2(0, -100));
+            ability.text = $"<b><color=#{ColorUtility.ToHtmlStringRGB(QuizBattlePalette.GoldTrim)}>{def.abilityName}</color></b>\n{def.abilityDescription}";
             ability.color = QuizBattlePalette.CreamText;
 
             var capturedId = def.characterId;

@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: quizbattle
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /api/server/info
+    envVars:
+      - key: MODE
+        value: wan
+      - key: SERVER_NAME
+        value: Classroom QuizBattle
+      - key: JWT_SECRET
+        generateValue: true

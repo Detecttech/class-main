@@ -91,6 +91,18 @@ namespace QuizBattle.UI.HUD
             _logText = QuizBattle.UI.UiFactory.CreateText(
                 logInner.transform, "LogText", new Vector2(0.5f, 0.5f), new Vector2(logWidth - 16f, logHeight - 12f), 11);
             _logText.alignment = TextAlignmentOptions.TopLeft;
+
+            _celebrationOverlay = AnswerCelebrationOverlay.Create(parent);
+        }
+
+        private AnswerCelebrationOverlay _celebrationOverlay;
+
+        public void ShowFeedback(bool correct, int streak, int chosenIndex = -1)
+        {
+            if (_celebrationOverlay != null)
+            {
+                _celebrationOverlay.ShowFeedback(correct, streak);
+            }
         }
 
         public void ShowQuestion(int questionNumber, string text, IReadOnlyList<string> choices)

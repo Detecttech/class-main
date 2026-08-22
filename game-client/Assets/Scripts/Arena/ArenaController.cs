@@ -41,6 +41,7 @@ namespace QuizBattle.Arena
         // OnQuestionPushedWhileLocked re-assert the lock after that happens, for as
         // long as the reward popup is still open.
         private bool _rewardPopupOpen;
+        private int _lastChosenIndex = -1;
 
         private void Start()
         {
@@ -88,12 +89,18 @@ namespace QuizBattle.Arena
 
         private void OnChoiceSelected(int choiceIndex)
         {
+            _lastChosenIndex = choiceIndex;
             _hud.SetChoicesInteractable(false);
             AppRoot.Instance.Client.Send("submit_answer", new { choiceIndex });
         }
 
         private void OnAnswerResult(AnswerResultPayload result)
         {
+            if (result.Ok)
+            {
+                _hud.ShowFeedback(result.Correct, result.StreakCount, _lastChosenIndex);
+            }
+
             if (!result.Ok || result.RewardOffered == null) return;
 
             var rewardId = result.RewardOffered.RewardId;

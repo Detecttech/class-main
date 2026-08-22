@@ -23,6 +23,34 @@ namespace QuizBattle.UI.Connect
         private void Start()
         {
             Build();
+            AutoDetectWebGLOrigin();
+        }
+
+        private void AutoDetectWebGLOrigin()
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            try
+            {
+                if (!string.IsNullOrEmpty(Application.absoluteURL))
+                {
+                    var uri = new Uri(Application.absoluteURL);
+                    _hostField.text = uri.Host;
+                    if (uri.Port > 0 && uri.Port != 80 && uri.Port != 443)
+                    {
+                        _portField.text = uri.Port.ToString();
+                    }
+                    else
+                    {
+                        _portField.text = uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase) ? "443" : "80";
+                    }
+                    SessionManager.UseSsl = uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[ConnectScreen] WebGL URL autodetect skipped: {ex.Message}");
+            }
+#endif
         }
 
         private void Build()
@@ -31,8 +59,8 @@ namespace QuizBattle.UI.Connect
             var title = UiFactory.CreateText(canvas.transform, "Title", new Vector2(0.5f, 0.85f), new Vector2(700, 60), 32);
             title.text = "Connect to Classroom Server";
 
-            _hostField = UiFactory.CreateInputField(canvas.transform, "HostField", new Vector2(0.5f, 0.6f), new Vector2(320, 50), "Server IP (e.g. 192.168.1.5)");
-            _portField = UiFactory.CreateInputField(canvas.transform, "PortField", new Vector2(0.5f, 0.5f), new Vector2(320, 50), "Port (default 7777)");
+            _hostField = UiFactory.CreateInputField(canvas.transform, "HostField", new Vector2(0.5f, 0.6f), new Vector2(320, 50), "Server IP / Domain (e.g. 192.168.1.5)");
+            _portField = UiFactory.CreateInputField(canvas.transform, "PortField", new Vector2(0.5f, 0.5f), new Vector2(320, 50), "Port (default 7777 / 443)");
 
             _connectButton = UiFactory.CreateButton(canvas.transform, "ConnectButton", new Vector2(0.5f, 0.38f), new Vector2(200, 50), "Connect");
             _connectButton.onClick.AddListener(OnConnectClicked);
@@ -42,15 +70,16 @@ namespace QuizBattle.UI.Connect
 
         public void OnConnectClicked()
         {
-            var host = string.IsNullOrWhiteSpace(_hostField.text) ? "localhost" : _hostField.text.Trim();
-            var port = int.TryParse(_portField.text, out var p) ? p : 7777;
-            _ = ConnectTo(host, port);
+            var hostText = _hostField.text;
+            int? explicitPort = int.TryParse(_portField.text, out var p) ? p : (int?)null;
+            SessionManager.SetEndpoint(hostText, explicitPort);
+            _ = ConnectTo(SessionManager.ServerHost, SessionManager.ServerPort);
         }
 
         public async Task ConnectTo(string host, int port)
         {
             _connectButton.interactable = false;
-            _statusText.text = $"Connecting to {host}:{port}...";
+            _statusText.text = $"Connecting to {SessionManager.WsUrl}...";
             SessionManager.ServerHost = host;
             SessionManager.ServerPort = port;
 

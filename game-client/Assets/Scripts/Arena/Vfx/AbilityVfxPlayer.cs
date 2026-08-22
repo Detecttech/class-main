@@ -48,52 +48,61 @@ namespace QuizBattle.Arena.Vfx
 
         private static void PlayFireball(Vector3 from, Vector3 to, List<ParticleSystem> spawned)
         {
-            var color = new Color(1f, 0.5f, 0.15f);
-            Track(ParticleFactory.Streaks(from, to, color, duration: 0.32f), spawned);
-            Track(ParticleFactory.Burst(to, color, size: 0.26f, count: 22, speed: 2.8f, lifetime: 0.4f), spawned);
+            var color = new Color(1f, 0.45f, 0.10f);
+            var gold = new Color(1f, 0.85f, 0.25f);
+            Track(ParticleFactory.Streaks(from + Vector3.up * 0.5f, to + Vector3.up * 0.5f, color, duration: 0.30f, count: 20), spawned);
+            Track(ParticleFactory.Streaks(from + Vector3.up * 0.5f, to + Vector3.up * 0.5f, gold, duration: 0.28f, count: 12), spawned);
+            Track(ParticleFactory.Burst(to + Vector3.up * 0.5f, color, size: 0.48f, count: 35, speed: 3.5f, lifetime: 0.45f), spawned);
+            Track(ParticleFactory.RingWave(to, color, startRadius: 0.2f, endRadius: 1.4f, duration: 0.45f, upright: false), spawned);
         }
 
         private static void PlayShieldShimmer(Vector3 at, List<ParticleSystem> spawned)
         {
-            var color = new Color(0.4f, 0.7f, 1f);
-            Track(ParticleFactory.RingWave(at + Vector3.up * 0.5f, color, startRadius: 0.15f, endRadius: 0.7f, duration: 0.55f), spawned);
+            var color = new Color(0.35f, 0.75f, 1f);
+            var gold = new Color(1f, 0.85f, 0.35f);
+            Track(ParticleFactory.RingWave(at + Vector3.up * 0.6f, color, startRadius: 0.15f, endRadius: 1.1f, duration: 0.6f), spawned);
+            Track(ParticleFactory.Burst(at + Vector3.up * 0.6f, gold, size: 0.28f, count: 24, speed: 2.2f, lifetime: 0.5f), spawned);
         }
 
         private static void PlayWindTrail(Vector3 from, Vector3 to, List<ParticleSystem> spawned)
         {
-            var color = new Color(0.6f, 1f, 0.75f);
-            Track(ParticleFactory.Streaks(from, to, color, duration: 0.4f, count: 14), spawned);
-            Track(ParticleFactory.RingWave(to, color, startRadius: 0.1f, endRadius: 0.5f, duration: 0.4f, upright: false), spawned);
+            var color = new Color(0.45f, 1f, 0.75f);
+            Track(ParticleFactory.Streaks(from + Vector3.up * 0.4f, to + Vector3.up * 0.4f, color, duration: 0.35f, count: 22), spawned);
+            Track(ParticleFactory.RingWave(to, color, startRadius: 0.15f, endRadius: 1.1f, duration: 0.4f, upright: false), spawned);
+            Track(ParticleFactory.Burst(to + Vector3.up * 0.5f, color, size: 0.32f, count: 20, speed: 2.6f, lifetime: 0.4f), spawned);
         }
 
         private static void PlayLifeDrain(Vector3 from, Vector3 to, List<ParticleSystem> spawned)
         {
-            var color = new Color(0.85f, 0.35f, 1f);
-            // Not particle-based, so nothing to track/simulate — it's visible immediately.
-            ParticleFactory.Beam(from + Vector3.up * 0.5f, to + Vector3.up * 0.5f, color, duration: 0.5f, width: 0.07f);
-            Track(ParticleFactory.Burst(to + Vector3.up * 0.5f, color, size: 0.2f, count: 12, speed: 1.4f, lifetime: 0.4f), spawned);
+            var color = new Color(0.90f, 0.25f, 1f);
+            var darkViolet = new Color(0.55f, 0.10f, 0.85f);
+            ParticleFactory.Beam(from + Vector3.up * 0.6f, to + Vector3.up * 0.6f, color, duration: 0.55f, width: 0.14f);
+            Track(ParticleFactory.Burst(to + Vector3.up * 0.6f, color, size: 0.38f, count: 24, speed: 2.2f, lifetime: 0.45f), spawned);
+            Track(ParticleFactory.Burst(from + Vector3.up * 0.6f, darkViolet, size: 0.28f, count: 16, speed: 1.8f, lifetime: 0.4f), spawned);
         }
 
         private static void PlayFreeze(Vector3 from, Vector3 to, List<ParticleSystem> spawned)
         {
-            var color = new Color(0.55f, 0.9f, 1f);
-            Track(ParticleFactory.Streaks(from + Vector3.up * 0.4f, to + Vector3.up * 0.4f, color, duration: 0.28f, count: 10), spawned);
-            Track(ParticleFactory.RingWave(to, color, startRadius: 0.1f, endRadius: 0.45f, duration: 0.4f, upright: false), spawned);
+            var color = new Color(0.50f, 0.90f, 1f);
+            var white = Color.white;
+            Track(ParticleFactory.Streaks(from + Vector3.up * 0.5f, to + Vector3.up * 0.5f, color, duration: 0.26f, count: 18), spawned);
+            Track(ParticleFactory.RingWave(to, color, startRadius: 0.15f, endRadius: 1.25f, duration: 0.45f, upright: false), spawned);
+            Track(ParticleFactory.Burst(to + Vector3.up * 0.6f, white, size: 0.36f, count: 30, speed: 2.8f, lifetime: 0.45f), spawned);
         }
 
         private static void PlayBasicStrike(Vector3 from, Vector3 to, List<ParticleSystem> spawned)
         {
-            var color = new Color(1f, 0.9f, 0.6f);
-            // Aegis/Zephyr have no active ability of their own, so every attack_choice
-            // they use falls back to this — it needs the same attacker-to-target travel
-            // as fireball/life_drain, or most attacks in a match would show no motion at all.
-            Track(ParticleFactory.Streaks(from + Vector3.up * 0.4f, to + Vector3.up * 0.4f, color, duration: 0.22f, count: 8), spawned);
-            Track(ParticleFactory.Burst(to + Vector3.up * 0.4f, color, size: 0.16f, count: 12, speed: 1.8f, lifetime: 0.3f), spawned);
+            var color = new Color(1f, 0.88f, 0.45f);
+            var spark = new Color(1f, 0.60f, 0.20f);
+            Track(ParticleFactory.Streaks(from + Vector3.up * 0.5f, to + Vector3.up * 0.5f, color, duration: 0.20f, count: 16), spawned);
+            Track(ParticleFactory.Burst(to + Vector3.up * 0.5f, spark, size: 0.34f, count: 26, speed: 2.8f, lifetime: 0.35f), spawned);
+            Track(ParticleFactory.RingWave(to, color, startRadius: 0.1f, endRadius: 0.85f, duration: 0.35f, upright: false), spawned);
         }
 
         private static void PlayEliminated(Vector3 at, List<ParticleSystem> spawned)
         {
-            Track(ParticleFactory.Burst(at + Vector3.up * 0.4f, new Color(0.6f, 0.6f, 0.65f), size: 0.22f, count: 26, speed: 2.2f, lifetime: 0.55f), spawned);
+            Track(ParticleFactory.Burst(at + Vector3.up * 0.5f, new Color(0.7f, 0.7f, 0.8f), size: 0.42f, count: 36, speed: 3.2f, lifetime: 0.6f), spawned);
+            Track(ParticleFactory.RingWave(at, new Color(0.6f, 0.6f, 0.7f), startRadius: 0.2f, endRadius: 1.3f, duration: 0.5f, upright: false), spawned);
         }
 
         private static void Track(GameObject go, List<ParticleSystem> spawned)

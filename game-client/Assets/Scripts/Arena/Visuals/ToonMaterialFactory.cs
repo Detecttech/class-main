@@ -25,16 +25,50 @@ namespace QuizBattle.Arena.Visuals
         public static ToonStyle Default => new ToonStyle
         {
             ShadowTint = QuizBattlePalette.ShadowTint,
-            RimColor = Color.white,
-            RimIntensity = 0.85f,
-            RimPower = 2.5f,
+            RimColor = new Color(0.92f, 0.96f, 1f),
+            RimIntensity = 1.25f,
+            RimPower = 2.0f,
             SpecTint = Color.white,
-            Gloss = 36f,
-            SpecIntensity = 0.65f,
+            Gloss = 22f,
+            SpecIntensity = 0.95f,
             EmissionColor = Color.black,
             EmissionIntensity = 0f,
             OutlineColor = QuizBattlePalette.OutlineColor,
             OutlineWidth = 2.2f,
+            OutlineEnabled = true,
+        };
+
+        // Ultra glossy specular and studio rim for Character Select and hero units
+        public static ToonStyle GlossyToy => new ToonStyle
+        {
+            ShadowTint = new Color(0.20f, 0.22f, 0.42f),
+            RimColor = new Color(0.85f, 0.95f, 1f),
+            RimIntensity = 1.65f,
+            RimPower = 1.8f,
+            SpecTint = Color.white,
+            Gloss = 18f,
+            SpecIntensity = 1.40f,
+            EmissionColor = Color.black,
+            EmissionIntensity = 0f,
+            OutlineColor = new Color(0.06f, 0.06f, 0.12f),
+            OutlineWidth = 2.4f,
+            OutlineEnabled = true,
+        };
+
+        // Translucent frosted ice crystal style
+        public static ToonStyle IceBlockStyle => new ToonStyle
+        {
+            ShadowTint = new Color(0.35f, 0.70f, 0.95f),
+            RimColor = Color.white,
+            RimIntensity = 2.2f,
+            RimPower = 1.5f,
+            SpecTint = Color.white,
+            Gloss = 16f,
+            SpecIntensity = 1.5f,
+            EmissionColor = new Color(0.3f, 0.75f, 1f),
+            EmissionIntensity = 0.4f,
+            OutlineColor = new Color(0.4f, 0.85f, 1f),
+            OutlineWidth = 2.5f,
             OutlineEnabled = true,
         };
     }

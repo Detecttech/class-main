@@ -80,7 +80,7 @@ namespace QuizBattle.UI
         private const int RoundedSpriteSize = 64;
         private const int RoundedSpriteCornerRadius = 16;
 
-        private static Sprite RoundedSprite
+        public static Sprite RoundedSprite
         {
             get
             {
