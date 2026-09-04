@@ -10,21 +10,8 @@ namespace QuizBattle.Arena.Visuals
         public Renderer[] Renderers;
     }
 
-    /// Builds a distinct silhouette per CharacterArchetype. Shared rules across every
-    /// archetype: origin at the feet (y=0 is the ground contact point, matching
-    /// GridController.TileToWorldPos), total height stays under ~1.3 tile-units so tokens
-    /// read clearly on an 8-wide board, and every character gets a thin emissive ground
-    /// disc in its own color — a cheap silhouette-independent position/team readability cue.
-    ///
-    /// Torsos/heads are imported ithappy character models (see ImportedModelResourcePaths)
-    /// recolored via QB_Toon; the flame crests/chest plates/fins/halos etc. below are the
-    /// original procedural accent parts, unchanged, just re-anchored onto the imported
-    /// body instead of a primitive torso.
     public static class CharacterVisualBuilder
     {
-        // Only 3 distinct body meshes are available in the free character pack, so Wind
-        // and Arcane share Base_Mesh — differentiated by BaseColor/AccentColor tint and
-        // their own accent parts, same as the rest of this file already does per-archetype.
         private static readonly Dictionary<CharacterArchetype, string> ImportedModelResourcePaths = new Dictionary<CharacterArchetype, string>
         {
             { CharacterArchetype.Fire, "Characters/Models/Costume_13_001" },
@@ -33,9 +20,6 @@ namespace QuizBattle.Arena.Visuals
             { CharacterArchetype.Arcane, "Characters/Models/Base_Mesh" },
         };
 
-        // Roughly matches the total height the old primitive-built torsos/heads occupied
-        // (~0.9-1.1 units), so the accent-part offsets below — authored against that old
-        // scale — still land in about the right place without per-bone repositioning math.
         private const float ImportedBodyHeight = 1.0f;
         private const string CharacterAtlasResourcePath = "Textures/CharacterAtlas";
 
@@ -46,26 +30,31 @@ namespace QuizBattle.Arena.Visuals
         {
             var renderers = new List<Renderer>();
             var animator = parent.gameObject.AddComponent<TokenIdleAnimator>();
+            var bodyRoot = new GameObject("CharacterBodyVisual").transform;
+            bodyRoot.SetParent(parent, false);
 
             switch (visual.Archetype)
             {
-                case CharacterArchetype.Fire:
-                    BuildFire(parent, visual, renderers, animator);
-                    break;
-                case CharacterArchetype.Tank:
-                    BuildTank(parent, visual, renderers, animator);
-                    break;
-                case CharacterArchetype.Wind:
-                    BuildWind(parent, visual, renderers, animator);
-                    break;
-                case CharacterArchetype.Arcane:
-                    BuildArcane(parent, visual, renderers, animator);
-                    break;
-                default:
-                    BuildGeneric(parent, visual, renderers);
-                    break;
+            case CharacterArchetype.Fire:
+                BuildFire(bodyRoot, visual, renderers, animator);
+                break;
+            case CharacterArchetype.Tank:
+                BuildTank(bodyRoot, visual, renderers, animator);
+                break;
+            case CharacterArchetype.Wind:
+                BuildWind(bodyRoot, visual, renderers, animator);
+                break;
+            case CharacterArchetype.Arcane:
+                BuildArcane(bodyRoot, visual, renderers, animator);
+                break;
+            default:
+                BuildGeneric(bodyRoot, visual, renderers);
+                break;
             }
 
+            bodyRoot.localRotation = Quaternion.Euler(0f, 180f, 0f);
+            animator.SetBodyRoot(bodyRoot);
+            AddGroundDisc(parent, visual.BaseColor, renderers);
             return new CharacterVisualResult { Root = parent.gameObject, Renderers = renderers.ToArray() };
         }
 
@@ -103,18 +92,6 @@ namespace QuizBattle.Arena.Visuals
             { CharacterArchetype.Arcane, new[] { "Characters/Models/Outwear_004", "Characters/Models/Pants_010", "Characters/Models/Hairstyle_Male_005", "Characters/Models/Shoe_Slippers_002" } },
         };
 
-        /// Instantiates the archetype's imported body model, scales it to
-        /// ImportedBodyHeight, and re-anchors it so feet sit at local y=0 (origin-at-feet,
-        /// matching every primitive-built archetype). Renderers keep the pack's own
-        /// natural colors/textures (no per-archetype tint) so characters look like the
-        /// pack's actual art instead of a flat-dyed silhouette — archetype color-coding
-        /// comes from the accent props (flame crest, halo, chest plate, ...), the ground
-        /// disc, and the HP bar/nameplate instead. Materials are still swapped to QB_Toon
-        /// (carrying the shared UV atlas through via the new _MainTex support) so the
-        /// outline pass, cel-shading, and CharacterToken.SetEliminated's dimming all keep
-        /// working uniformly instead of mixing in the pack's own shader.
-        /// Returns null (falls back to no imported body) if the archetype has no mapped
-        /// model or the resource failed to load.
         private static GameObject BuildImportedBody(Transform parent, CharacterArchetype archetype, List<Renderer> renderers)
         {
             if (!ImportedModelResourcePaths.TryGetValue(archetype, out var resourcePath)) return null;
@@ -122,12 +99,13 @@ namespace QuizBattle.Arena.Visuals
             var prefab = Resources.Load<GameObject>(resourcePath);
             if (prefab == null)
             {
-                Debug.LogWarning($"[CharacterVisualBuilder] imported model '{resourcePath}' not found — {archetype} will have no body.");
+                Debug.LogWarning($"[CharacterVisualBuilder] imported model '{resourcePath}' not found; using a fallback body for {archetype}.");
                 return null;
             }
 
             var instance = Object.Instantiate(prefab, parent, false);
             instance.name = "Body";
+            PoseImportedArms(instance.transform, parent);
 
             var enabledRenderers = new List<Renderer>();
             foreach (var r in instance.GetComponentsInChildren<Renderer>())
@@ -136,24 +114,23 @@ namespace QuizBattle.Arena.Visuals
                 else enabledRenderers.Add(r);
             }
             var bodyRenderers = enabledRenderers.ToArray();
-            if (bodyRenderers.Length == 0) return instance;
+            if (bodyRenderers.Length == 0)
+            {
+                Object.Destroy(instance);
+                return null;
+            }
 
-            var bounds = bodyRenderers[0].bounds;
-            foreach (var r in bodyRenderers) bounds.Encapsulate(r.bounds);
+            var bounds = GetLocalBounds(parent, bodyRenderers);
             float rawHeight = Mathf.Max(bounds.size.y, 0.001f);
-            instance.transform.localScale = Vector3.one * (ImportedBodyHeight / rawHeight);
+            instance.transform.localScale *= ImportedBodyHeight / rawHeight;
 
-            // Re-measure after scaling — bounds.min.y shifts non-linearly with scale
-            // around an arbitrary pivot, so this can't be precomputed before the scale is set.
-            bounds = bodyRenderers[0].bounds;
-            foreach (var r in bodyRenderers) bounds.Encapsulate(r.bounds);
-            float feetGap = bounds.min.y - parent.position.y;
-            instance.transform.localPosition = new Vector3(0f, -feetGap, 0f);
+            bounds = GetLocalBounds(parent, bodyRenderers);
+            instance.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
 
             var atlas = ResolveCharacterAtlas();
             var naturalMat = atlas != null
-                ? ToonMaterialFactory.Instance(Color.white, ToonStyle.Default, atlas, new Vector4(1f, 1f, 0f, 0f))
-                : ToonMaterialFactory.Instance(Color.white);
+                             ? ToonMaterialFactory.Instance(Color.white, ToonStyle.Default, atlas, new Vector4(1f, 1f, 0f, 0f))
+                             : ToonMaterialFactory.Instance(Color.white);
 
             ApplyNaturalMaterial(bodyRenderers, naturalMat, renderers);
 
@@ -174,12 +151,70 @@ namespace QuizBattle.Arena.Visuals
                     var piece = Object.Instantiate(wardrobePrefab, parent, false);
                     piece.transform.localScale = instance.transform.localScale;
                     piece.transform.localPosition = instance.transform.localPosition;
+                    piece.transform.localRotation = instance.transform.localRotation;
+                    PoseImportedArms(piece.transform, parent);
                     var pieceRenderers = piece.GetComponentsInChildren<Renderer>();
                     ApplyNaturalMaterial(pieceRenderers, naturalMat, renderers);
                 }
             }
 
             return instance;
+        }
+
+        private static void PoseImportedArms(Transform instance, Transform parent)
+        {
+            var bones = instance.GetComponentsInChildren<Transform>();
+            for (int side = -1; side <= 1; side += 2)
+            {
+                string prefix = side < 0 ? "Left" : "Right";
+                Transform arm = null;
+                Transform elbow = null;
+                Transform hand = null;
+                foreach (var bone in bones)
+                {
+                    if (bone.name == prefix + "Arm") arm = bone;
+                    else if (bone.name == prefix + "ForeArm") elbow = bone;
+                    else if (bone.name == prefix + "Hand") hand = bone;
+                }
+                if (arm == null || elbow == null || hand == null) continue;
+                var upperDirection = parent.TransformDirection(new Vector3(side * 0.5f, -0.866f, 0f));
+                arm.rotation = Quaternion.FromToRotation(elbow.position - arm.position, upperDirection) * arm.rotation;
+                var lowerDirection = parent.TransformDirection(new Vector3(side * 0.2f, -0.97f, 0.12f));
+                elbow.rotation = Quaternion.FromToRotation(hand.position - elbow.position, lowerDirection) * elbow.rotation;
+            }
+        }
+
+        private static Vector3 BodyPoint(Transform parent, string boneName, Vector3 fallback)
+        {
+            var body = parent.Find("Body");
+            if (body != null)
+                foreach (var bone in body.GetComponentsInChildren<Transform>())
+                    if (bone.name == boneName) return parent.InverseTransformPoint(bone.position);
+            return fallback;
+        }
+
+        private static Bounds GetLocalBounds(Transform parent, Renderer[] renderers)
+        {
+            var bounds = new Bounds();
+            bool initialized = false;
+            foreach (var renderer in renderers)
+            {
+                var localBounds = renderer.localBounds;
+                var matrix = parent.worldToLocalMatrix * renderer.localToWorldMatrix;
+                for (int i = 0; i < 8; i++)
+                {
+                    var corner = localBounds.center + Vector3.Scale(localBounds.extents,
+                                 new Vector3((i & 1) == 0 ? -1f : 1f, (i & 2) == 0 ? -1f : 1f, (i & 4) == 0 ? -1f : 1f));
+                    var point = matrix.MultiplyPoint3x4(corner);
+                    if (!initialized)
+                    {
+                        bounds = new Bounds(point, Vector3.zero);
+                        initialized = true;
+                    }
+                    else bounds.Encapsulate(point);
+                }
+            }
+            return bounds;
         }
 
         private static void ApplyNaturalMaterial(Renderer[] targets, Material naturalMat, List<Renderer> renderers)
@@ -197,101 +232,211 @@ namespace QuizBattle.Arena.Visuals
         {
             var bodyMat = ToonMaterialFactory.Instance(visual.BaseColor);
             CreatePrimitivePart(parent, "Body", PrimitiveType.Capsule, new Vector3(0, 0.5f, 0), Quaternion.identity,
-                new Vector3(0.6f, 0.5f, 0.6f), bodyMat, renderers);
-            AddGroundDisc(parent, visual.BaseColor, renderers);
+                                new Vector3(0.6f, 0.5f, 0.6f), bodyMat, renderers);
         }
 
         private static void BuildFire(Transform parent, in CharacterVisual visual, List<Renderer> renderers, TokenIdleAnimator animator)
         {
-            var emberMat = ToonMaterialFactory.GlowInstance(visual.EmissionColor, intensity: 2.5f, softEdge: 0.3f);
+            if (BuildImportedBody(parent, CharacterArchetype.Fire, renderers) == null) BuildGeneric(parent, visual, renderers);
+            var armorMat = EquipmentMaterial(Color.Lerp(visual.BaseColor, new Color(0.18f, 0.06f, 0.04f), 0.6f));
+            var trimMat = EquipmentMaterial(visual.AccentColor);
+            var emberMat = EquipmentMaterial(visual.BaseColor, visual.EmissionColor, 0.28f);
+            var gauntletMesh = PrimitiveMeshFactory.Cone(6, 0.105f, 0.08f, 0.18f);
+            var cuffMesh = PrimitiveMeshFactory.Cone(6, 0.085f, 0.095f, 0.045f);
+            var flameMesh = PrimitiveMeshFactory.Cone(5, 0.065f, 0f, 0.22f);
 
-            var body = BuildImportedBody(parent, CharacterArchetype.Fire, renderers);
-            if (body != null) animator.SetBodyRoot(body.transform);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                string prefix = side < 0 ? "Left" : "Right";
+                var hand = BodyPoint(parent, prefix + "Hand", new Vector3(side * 0.23f, 0.43f, 0.015f));
+                var elbow = BodyPoint(parent, prefix + "ForeArm", new Vector3(side * 0.2f, 0.56f, 0f));
+                var direction = (elbow - hand).normalized;
+                var gauntlet = CreatePart(parent, $"FireGauntlet_{side}", gauntletMesh,
+                                          hand - direction * 0.065f, Quaternion.FromToRotation(Vector3.up, direction),
+                                          new Vector3(1f, 1f, 0.85f), armorMat, renderers).transform;
+                CreatePart(gauntlet, "GoldCuff", cuffMesh, new Vector3(0f, 0.145f, 0f), Quaternion.identity, Vector3.one, trimMat, renderers);
+                CreatePrimitivePart(gauntlet, "EmberKnuckle", PrimitiveType.Sphere, new Vector3(0f, 0.065f, 0.08f),
+                                    Quaternion.identity, new Vector3(0.095f, 0.08f, 0.04f), emberMat, renderers);
+                CreatePart(gauntlet, "FlameGuard", flameMesh, new Vector3(side * 0.06f, 0.08f, 0f),
+                           Quaternion.Euler(-18f, 0f, -side * 20f), new Vector3(0.5f, 0.55f, 0.6f), trimMat, renderers);
+                CreatePrimitivePart(parent, $"FirePauldron_{side}", PrimitiveType.Sphere,
+                                    BodyPoint(parent, prefix + "Arm", new Vector3(side * 0.18f, 0.68f, 0f)) + new Vector3(side * 0.025f, -0.025f, 0f),
+                                    Quaternion.Euler(0f, 0f, side * -18f),
+                                    new Vector3(0.18f, 0.11f, 0.22f), armorMat, renderers);
+            }
 
-            var flameMesh = PrimitiveMeshFactory.Cone(5, 0.05f, 0f, 0.18f);
-            CreatePart(parent, "FlameCrestCenter", flameMesh, new Vector3(0f, 0.74f, -0.05f), Quaternion.Euler(-16f, 0, 0), Vector3.one, emberMat, renderers);
-            CreatePart(parent, "FlameCrestLeft", flameMesh, new Vector3(-0.07f, 0.72f, -0.03f), Quaternion.Euler(-8f, 0, 16f), Vector3.one * 0.8f, emberMat, renderers);
-            CreatePart(parent, "FlameCrestRight", flameMesh, new Vector3(0.07f, 0.72f, -0.03f), Quaternion.Euler(-8f, 0, -16f), Vector3.one * 0.8f, emberMat, renderers);
+            CreatePart(parent, "FlameCrestCenter", flameMesh, new Vector3(0f, 0.96f, -0.025f),
+                       Quaternion.Euler(-20f, 0f, 0f), new Vector3(1f, 1f, 0.65f), emberMat, renderers);
+            for (int side = -1; side <= 1; side += 2)
+                CreatePart(parent, $"FlameCrest_{side}", flameMesh, new Vector3(side * 0.085f, 0.93f, -0.025f),
+                           Quaternion.Euler(-15f, 0f, -side * 24f), new Vector3(0.7f, 0.72f, 0.55f), trimMat, renderers);
 
-            var emberLeft = CreatePrimitivePart(parent, "EmberLeft", PrimitiveType.Sphere, new Vector3(-0.24f, 0.4f, 0.1f), Quaternion.identity, Vector3.one * 0.06f, emberMat, renderers);
-            var emberRight = CreatePrimitivePart(parent, "EmberRight", PrimitiveType.Sphere, new Vector3(0.24f, 0.35f, -0.08f), Quaternion.identity, Vector3.one * 0.06f, emberMat, renderers);
-            animator.Register(emberLeft.transform, bobSpeed: 1.6f, bobAmount: 0.025f);
-            animator.Register(emberRight.transform, bobSpeed: 1.3f, bobAmount: 0.02f);
-
-            AddGroundDisc(parent, visual.BaseColor, renderers);
+            var ember = CreatePart(parent, "FloatingEmber", PrimitiveMeshFactory.Cone(4, 0.025f, 0f, 0.065f),
+                                   new Vector3(0.36f, 0.64f, 0.02f), Quaternion.Euler(0f, 45f, -12f), Vector3.one, emberMat, renderers);
+            animator.Register(ember.transform, bobSpeed: 1.6f, bobAmount: 0.015f, spinSpeed: 24f);
         }
 
         private static void BuildTank(Transform parent, in CharacterVisual visual, List<Renderer> renderers, TokenIdleAnimator animator)
         {
-            var accentMat = ToonMaterialFactory.Instance(visual.AccentColor);
+            if (BuildImportedBody(parent, CharacterArchetype.Tank, renderers) == null) BuildGeneric(parent, visual, renderers);
+            var armorMat = EquipmentMaterial(Color.Lerp(visual.BaseColor, new Color(0.06f, 0.12f, 0.23f), 0.55f));
+            var trimMat = EquipmentMaterial(visual.AccentColor);
+            var enamelMat = EquipmentMaterial(visual.BaseColor);
 
-            var body = BuildImportedBody(parent, CharacterArchetype.Tank, renderers);
-            if (body != null) animator.SetBodyRoot(body.transform);
+            CreatePrimitivePart(parent, "ChestPlate", PrimitiveType.Sphere, new Vector3(0f, 0.53f, 0.14f),
+                                Quaternion.identity, new Vector3(0.32f, 0.26f, 0.13f), armorMat, renderers);
+            CreatePrimitivePart(parent, "ChestSigil", PrimitiveType.Cube, new Vector3(0f, 0.56f, 0.205f),
+                                Quaternion.Euler(0f, 0f, 45f), new Vector3(0.065f, 0.065f, 0.022f), trimMat, renderers);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                string prefix = side < 0 ? "Left" : "Right";
+                var shoulder = CreatePart(parent, $"TankPauldron_{side}", PrimitiveMeshFactory.Cone(6, 0.12f, 0.085f, 0.11f),
+                                          BodyPoint(parent, prefix + "Arm", new Vector3(side * 0.22f, 0.68f, 0f)) + new Vector3(side * 0.03f, -0.075f, 0f),
+                                          Quaternion.Euler(0f, 30f, side * -16f),
+                                          new Vector3(1f, 1f, 1.15f), armorMat, renderers).transform;
+                CreatePart(shoulder, "ShoulderRim", PrimitiveMeshFactory.Cone(6, 0.125f, 0.12f, 0.025f),
+                           Vector3.zero, Quaternion.identity, Vector3.one, trimMat, renderers);
+                CreatePrimitivePart(parent, $"Greave_{side}", PrimitiveType.Cube,
+                                    new Vector3(side * 0.105f, 0.19f, 0.09f), Quaternion.Euler(-8f, 0f, side * -5f),
+                                    new Vector3(0.12f, 0.16f, 0.07f), armorMat, renderers);
+            }
 
-            CreatePrimitivePart(parent, "ChestPlate", PrimitiveType.Cube, new Vector3(0, 0.5f, 0.15f), Quaternion.identity, new Vector3(0.36f, 0.28f, 0.06f), accentMat, renderers);
-
-            CreatePrimitivePart(parent, "ShoulderLeft", PrimitiveType.Cube, new Vector3(-0.3f, 0.62f, 0), Quaternion.Euler(0, 0, 16f), new Vector3(0.18f, 0.14f, 0.24f), accentMat, renderers);
-            CreatePrimitivePart(parent, "ShoulderRight", PrimitiveType.Cube, new Vector3(0.3f, 0.62f, 0), Quaternion.Euler(0, 0, -16f), new Vector3(0.18f, 0.14f, 0.24f), accentMat, renderers);
-
-            CreatePrimitivePart(parent, "Shield", PrimitiveType.Cube, new Vector3(-0.34f, 0.42f, 0.05f), Quaternion.Euler(0, 20f, 0), new Vector3(0.06f, 0.5f, 0.34f), accentMat, renderers);
-
-            AddGroundDisc(parent, visual.BaseColor, renderers);
+            var shield = new GameObject("Shield").transform;
+            shield.SetParent(parent, false);
+            shield.localPosition = BodyPoint(parent, "LeftHand", new Vector3(-0.255f, 0.45f, 0.06f)) + new Vector3(-0.055f, 0.04f, 0.1f);
+            shield.localRotation = Quaternion.Euler(8f, -18f, -8f);
+            var shieldMesh = PrimitiveMeshFactory.Cone(6, 0.5f, 0.46f, 0.07f);
+            CreatePart(shield, "ShieldRim", shieldMesh, Vector3.zero, Quaternion.Euler(90f, 0f, 0f),
+                       new Vector3(0.38f, 1f, 0.55f), trimMat, renderers);
+            CreatePart(shield, "ShieldFace", shieldMesh, new Vector3(0f, 0f, 0.035f), Quaternion.Euler(90f, 0f, 0f),
+                       new Vector3(0.325f, 0.65f, 0.48f), enamelMat, renderers);
+            CreatePrimitivePart(shield, "ShieldBoss", PrimitiveType.Sphere, new Vector3(0f, 0f, 0.095f),
+                                Quaternion.identity, new Vector3(0.12f, 0.12f, 0.065f), trimMat, renderers);
+            CreatePrimitivePart(shield, "ShieldSpine", PrimitiveType.Cube, new Vector3(0f, 0f, 0.075f),
+                                Quaternion.identity, new Vector3(0.022f, 0.36f, 0.018f), trimMat, renderers);
         }
 
         private static void BuildWind(Transform parent, in CharacterVisual visual, List<Renderer> renderers, TokenIdleAnimator animator)
         {
-            var accentMat = ToonMaterialFactory.GlowInstance(visual.EmissionColor, intensity: 1.2f, softEdge: 0.25f);
+            if (BuildImportedBody(parent, CharacterArchetype.Wind, renderers) == null) BuildGeneric(parent, visual, renderers);
+            var armorMat = EquipmentMaterial(Color.Lerp(visual.BaseColor, new Color(0.035f, 0.18f, 0.17f), 0.6f));
+            var bladeMat = EquipmentMaterial(visual.AccentColor);
+            var jadeMat = EquipmentMaterial(visual.BaseColor, visual.EmissionColor, 0.12f);
+            var finMesh = PrimitiveMeshFactory.Cone(4, 0.07f, 0f, 0.3f);
 
-            var body = BuildImportedBody(parent, CharacterArchetype.Wind, renderers);
-            if (body != null) animator.SetBodyRoot(body.transform);
-
-            var finMesh = PrimitiveMeshFactory.Cone(4, 0.04f, 0f, 0.26f);
-            CreatePart(parent, "FinLeft", finMesh, new Vector3(-0.15f, 0.78f, -0.02f), Quaternion.Euler(70f, 20f, 60f), Vector3.one, accentMat, renderers);
-            CreatePart(parent, "FinRight", finMesh, new Vector3(0.15f, 0.78f, -0.02f), Quaternion.Euler(70f, -20f, -60f), Vector3.one, accentMat, renderers);
-
-            // Flat/horizontal (no tilt) so it reads as wind swirling around the ankle and
-            // so spinning it around local up matches its visual orbit, not a tumble.
-            var ringMesh = PrimitiveMeshFactory.Torus(0.22f, 0.025f, 16, 6);
-            var ring = CreatePart(parent, "AnkleRing", ringMesh, new Vector3(0, 0.08f, 0), Quaternion.identity, Vector3.one, accentMat, renderers);
-            animator.Register(ring.transform, bobAmount: 0f, spinSpeed: 90f);
-
-            AddGroundDisc(parent, visual.BaseColor, renderers);
+            CreatePrimitivePart(parent, "WindHarness", PrimitiveType.Cube, new Vector3(0f, 0.55f, 0.13f),
+                                Quaternion.Euler(0f, 0f, -28f), new Vector3(0.065f, 0.27f, 0.045f), armorMat, renderers);
+            CreatePrimitivePart(parent, "JadeClasp", PrimitiveType.Cube, new Vector3(0.015f, 0.57f, 0.16f),
+                                Quaternion.Euler(0f, 0f, 45f), new Vector3(0.055f, 0.055f, 0.035f), jadeMat, renderers);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                string prefix = side < 0 ? "Left" : "Right";
+                var shoulder = BodyPoint(parent, prefix + "Arm", new Vector3(side * 0.18f, 0.68f, 0f));
+                CreatePrimitivePart(parent, $"WindShoulder_{side}", PrimitiveType.Sphere,
+                                    shoulder + new Vector3(side * 0.025f, -0.02f, -0.035f), Quaternion.Euler(0f, 0f, side * -20f),
+                                    new Vector3(0.145f, 0.09f, 0.16f), armorMat, renderers);
+                CreatePart(parent, $"SweptFin_{side}", finMesh, shoulder + new Vector3(side * 0.04f, 0f, -0.065f),
+                           Quaternion.Euler(-32f, side * 20f, -side * 38f), new Vector3(1f, 1f, 0.38f), bladeMat, renderers);
+                CreatePart(parent, $"LowerFin_{side}", finMesh, shoulder + new Vector3(side * 0.065f, -0.03f, -0.065f),
+                           Quaternion.Euler(-42f, side * 20f, -side * 60f), new Vector3(0.65f, 0.65f, 0.32f), jadeMat, renderers);
+                var hand = BodyPoint(parent, prefix + "Hand", new Vector3(side * 0.23f, 0.43f, 0.015f));
+                var elbow = BodyPoint(parent, prefix + "ForeArm", new Vector3(side * 0.2f, 0.56f, 0f));
+                var direction = (elbow - hand).normalized;
+                var bracer = CreatePart(parent, $"WindBracer_{side}", PrimitiveMeshFactory.Cone(6, 0.065f, 0.06f, 0.14f),
+                                        hand - direction * 0.02f, Quaternion.FromToRotation(Vector3.up, direction),
+                                        Vector3.one, armorMat, renderers).transform;
+                CreatePart(bracer, "ForearmBlade", finMesh, new Vector3(side * 0.045f, 0.04f, 0.01f),
+                           Quaternion.Euler(0f, 0f, -side * 15f), new Vector3(0.55f, 0.75f, 0.3f), bladeMat, renderers);
+                CreatePart(parent, $"HeelFin_{side}", finMesh, new Vector3(side * 0.095f, 0.1f, -0.07f),
+                           Quaternion.Euler(-50f, 0f, -side * 20f), new Vector3(0.5f, 0.42f, 0.35f), jadeMat, renderers);
+            }
         }
 
         private static void BuildArcane(Transform parent, in CharacterVisual visual, List<Renderer> renderers, TokenIdleAnimator animator)
         {
-            var glowMat = ToonMaterialFactory.GlowInstance(visual.EmissionColor, intensity: 1.8f, softEdge: 0.3f);
+            if (BuildImportedBody(parent, CharacterArchetype.Arcane, renderers) == null) BuildGeneric(parent, visual, renderers);
+            var armorMat = EquipmentMaterial(Color.Lerp(visual.BaseColor, new Color(0.09f, 0.055f, 0.2f), 0.7f));
+            var trimMat = EquipmentMaterial(new Color(0.84f, 0.69f, 0.4f));
+            var crystalMat = EquipmentMaterial(visual.AccentColor, visual.EmissionColor, 0.24f);
 
-            var body = BuildImportedBody(parent, CharacterArchetype.Arcane, renderers);
-            if (body != null) animator.SetBodyRoot(body.transform);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                string prefix = side < 0 ? "Left" : "Right";
+                CreatePart(parent, $"ArcaneMantle_{side}", PrimitiveMeshFactory.Cone(5, 0.1f, 0.055f, 0.095f),
+                           BodyPoint(parent, prefix + "Arm", new Vector3(side * 0.15f, 0.7f, 0f)) + new Vector3(side * 0.02f, -0.07f, -0.015f),
+                           Quaternion.Euler(-12f, 0f, side * -25f),
+                           new Vector3(1f, 1f, 1.1f), armorMat, renderers);
+                CreatePrimitivePart(parent, $"MantleClasp_{side}", PrimitiveType.Sphere,
+                                    new Vector3(side * 0.125f, 0.65f, 0.105f), Quaternion.identity,
+                                    new Vector3(0.055f, 0.055f, 0.03f), trimMat, renderers);
+            }
+            CreatePrimitivePart(parent, "ArcaneBelt", PrimitiveType.Cube, new Vector3(0f, 0.4f, 0.12f),
+                                Quaternion.identity, new Vector3(0.23f, 0.045f, 0.055f), armorMat, renderers);
+            CreateCrystal(parent, "BeltFocus", new Vector3(0f, 0.41f, 0.155f), new Vector3(0.04f, 0.07f, 0.025f), crystalMat, renderers);
 
-            var haloMesh = PrimitiveMeshFactory.Torus(0.16f, 0.02f, 16, 6);
-            var haloA = CreatePart(parent, "HaloA", haloMesh, new Vector3(0, 0.95f, 0), Quaternion.Euler(70f, 0f, 0f), Vector3.one, glowMat, renderers);
-            var haloB = CreatePart(parent, "HaloB", haloMesh, new Vector3(0, 0.9f, 0), Quaternion.Euler(20f, 50f, 0f), Vector3.one * 0.85f, glowMat, renderers);
-            animator.Register(haloA.transform, bobAmount: 0f, spinSpeed: 40f);
-            animator.Register(haloB.transform, bobAmount: 0f, spinSpeed: -55f);
+            var staff = new GameObject("ArcaneStaff").transform;
+            staff.SetParent(parent, false);
+            staff.localRotation = Quaternion.Euler(-5f, 0f, -7f);
+            staff.localPosition = BodyPoint(parent, "RightHand", new Vector3(0.27f, 0.45f, 0.035f))
+                                  - staff.localRotation * new Vector3(0f, 0.33f, 0f);
+            CreatePart(staff, "StaffShaft", PrimitiveMeshFactory.Cone(8, 0.018f, 0.014f, 0.75f),
+                       Vector3.zero, Quaternion.identity, Vector3.one, armorMat, renderers);
+            var ferruleMesh = PrimitiveMeshFactory.Cone(8, 0.023f, 0.023f, 0.045f);
+            CreatePart(staff, "StaffFoot", ferruleMesh, Vector3.zero, Quaternion.identity, Vector3.one, trimMat, renderers);
+            CreatePart(staff, "StaffGrip", ferruleMesh, new Vector3(0f, 0.29f, 0f), Quaternion.identity,
+                       new Vector3(1f, 2f, 1f), trimMat, renderers);
+            CreatePart(staff, "FocusCrown", PrimitiveMeshFactory.Torus(0.075f, 0.012f, 12, 5),
+                       new Vector3(0f, 0.79f, 0f), Quaternion.Euler(65f, 0f, 0f), Vector3.one, trimMat, renderers);
+            var focus = CreateCrystal(staff, "StaffCrystal", new Vector3(0f, 0.82f, 0f),
+                                      new Vector3(0.062f, 0.17f, 0.062f), crystalMat, renderers);
+            animator.Register(focus, bobSpeed: 1.1f, bobAmount: 0.008f, spinSpeed: 25f);
 
-            var orb = CreatePrimitivePart(parent, "Orb", PrimitiveType.Sphere, new Vector3(0, 0.55f, 0.22f), Quaternion.identity, Vector3.one * 0.09f, glowMat, renderers);
-            animator.Register(orb.transform, bobSpeed: 1.5f, bobAmount: 0.03f);
+            var orbit = new GameObject("CrystalOrbit").transform;
+            orbit.SetParent(parent, false);
+            orbit.localPosition = new Vector3(0f, 1.04f, 0f);
+            for (int i = 0; i < 3; i++)
+            {
+                float angle = i * Mathf.PI * 2f / 3f;
+                CreateCrystal(orbit, $"OrbitCrystal_{i}", new Vector3(Mathf.Cos(angle) * 0.205f, i == 1 ? 0.035f : 0f, Mathf.Sin(angle) * 0.205f),
+                              new Vector3(0.03f, 0.075f, 0.03f), crystalMat, renderers);
+            }
+            animator.Register(orbit, bobSpeed: 0.9f, bobAmount: 0.008f, spinSpeed: -18f);
+        }
 
-            AddGroundDisc(parent, visual.BaseColor, renderers);
+        private static Material EquipmentMaterial(Color color, Color emission = default, float emissionIntensity = 0f)
+        {
+            var style = ToonStyle.Default;
+            style.RimIntensity = 0.45f;
+            style.SpecIntensity = 0.55f;
+            style.Gloss = 32f;
+            style.OutlineWidth = 1.25f;
+            style.EmissionColor = emission;
+            style.EmissionIntensity = emissionIntensity;
+            return ToonMaterialFactory.Instance(color, style);
+        }
+
+        private static Transform CreateCrystal(Transform parent, string name, Vector3 position, Vector3 scale,
+                                               Material material, List<Renderer> renderers)
+        {
+            var crystal = new GameObject(name).transform;
+            crystal.SetParent(parent, false);
+            crystal.localPosition = position;
+            crystal.localScale = scale;
+            var mesh = PrimitiveMeshFactory.Cone(5, 1f, 0f, 0.5f);
+            CreatePart(crystal, "CrystalTip", mesh, Vector3.zero, Quaternion.identity, Vector3.one, material, renderers);
+            CreatePart(crystal, "CrystalBase", mesh, Vector3.zero, Quaternion.Euler(180f, 0f, 0f), Vector3.one, material, renderers);
+            return crystal;
         }
 
         private static void AddGroundDisc(Transform parent, Color color, List<Renderer> renderers, float radius = 0.4f)
         {
-            // Soft dark contact blob shadow on the grass floor
-            var shadowMat = ToonMaterialFactory.GlowInstance(new Color(0.02f, 0.02f, 0.04f), intensity: 0.85f, softEdge: 0.6f);
-            CreatePrimitivePart(parent, "BlobShadow", PrimitiveType.Cylinder, new Vector3(0, 0.012f, 0), Quaternion.identity,
-                new Vector3(radius * 2.2f, 0.008f, radius * 2.2f), shadowMat, renderers);
-
-            // Stylized golden & team-tinted metallic base ring
-            var ringMat = ToonMaterialFactory.GlowInstance(color, intensity: 1.3f, softEdge: 0.2f);
-            var ringMesh = PrimitiveMeshFactory.Torus(radius * 1.05f, 0.03f, 20, 6);
+            var ringMat = ToonMaterialFactory.GlowInstance(color, intensity: 0.85f, softEdge: 0.2f);
+            var ringMesh = PrimitiveMeshFactory.Torus(radius * 1.05f, 0.018f, 20, 6);
             CreatePart(parent, "TeamBaseRing", ringMesh, new Vector3(0, 0.022f, 0), Quaternion.identity, Vector3.one, ringMat, renderers);
         }
 
         private static GameObject CreatePart(Transform parent, string name, Mesh mesh, Vector3 localPos, Quaternion localRot,
-            Vector3 localScale, Material material, List<Renderer> renderers)
+                                             Vector3 localScale, Material material, List<Renderer> renderers)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -306,7 +451,7 @@ namespace QuizBattle.Arena.Visuals
         }
 
         private static GameObject CreatePrimitivePart(Transform parent, string name, PrimitiveType type, Vector3 localPos,
-            Quaternion localRot, Vector3 localScale, Material material, List<Renderer> renderers)
+                Quaternion localRot, Vector3 localScale, Material material, List<Renderer> renderers)
         {
             var go = GameObject.CreatePrimitive(type);
             go.name = name;

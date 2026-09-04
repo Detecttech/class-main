@@ -2,9 +2,6 @@ using UnityEngine;
 
 namespace QuizBattle.Arena
 {
-    /// Single source of truth for the game's Clash-Royale-inspired warm/saturated
-    /// palette — coordinates colors that previously lived as ad hoc literals scattered
-    /// across GridController, UiFactory, ArenaEnvironment, and ToonMaterialFactory.
     public static class QuizBattlePalette
     {
         // Gold accents — reserved for zones, borders, and premium/reward UI.
@@ -12,21 +9,22 @@ namespace QuizBattle.Arena
         public static readonly Color GoldTrimDark = new Color(0.72f, 0.52f, 0.10f);
         public static readonly Color ZoneGold = new Color(1.00f, 0.78f, 0.12f);
 
-        // Arena floor — vibrant Clash Royale lush grass lawn checkerboard.
-        public static readonly Color GrassLight = new Color(0.38f, 0.76f, 0.22f);
-        public static readonly Color GrassDark = new Color(0.28f, 0.64f, 0.15f);
-        public static readonly Color GrassHighlight = new Color(0.48f, 0.84f, 0.28f);
+        public static readonly Color GrassLight = new Color(0.24f, 0.43f, 0.46f);
+        public static readonly Color GrassDark = new Color(0.18f, 0.34f, 0.39f);
+        public static readonly Color GrassHighlight = new Color(0.36f, 0.58f, 0.59f);
+        public static readonly Color ArenaCyan = new Color(0.22f, 0.84f, 0.94f);
+        public static readonly Color ArcaneViolet = new Color(0.53f, 0.35f, 0.78f);
 
         // Legacy warm tile fallbacks for sand/terracotta themes.
         public static readonly Color WarmTileLight = new Color(0.86f, 0.72f, 0.52f);
         public static readonly Color WarmTileDark = new Color(0.70f, 0.52f, 0.34f);
 
         // Arena Colosseum stone, wood & foundation.
-        public static readonly Color StoneBorder = new Color(0.68f, 0.72f, 0.78f);
-        public static readonly Color StoneWall = new Color(0.50f, 0.54f, 0.62f);
-        public static readonly Color StoneDark = new Color(0.34f, 0.38f, 0.46f);
-        public static readonly Color PlinthColor = new Color(0.28f, 0.30f, 0.38f);
-        public static readonly Color PlinthShadowTint = new Color(0.18f, 0.16f, 0.26f);
+        public static readonly Color StoneBorder = new Color(0.43f, 0.53f, 0.65f);
+        public static readonly Color StoneWall = new Color(0.25f, 0.31f, 0.44f);
+        public static readonly Color StoneDark = new Color(0.12f, 0.17f, 0.28f);
+        public static readonly Color PlinthColor = new Color(0.12f, 0.16f, 0.26f);
+        public static readonly Color PlinthShadowTint = new Color(0.10f, 0.10f, 0.20f);
 
         public static readonly Color WoodPlank = new Color(0.58f, 0.38f, 0.20f);
         public static readonly Color WoodDark = new Color(0.38f, 0.24f, 0.12f);
@@ -50,10 +48,10 @@ namespace QuizBattle.Arena
         public static readonly Color WaterFoam = new Color(0.85f, 0.96f, 1.00f);
 
         // Sky & Clouds.
-        public static readonly Color SkyZenith = new Color(0.28f, 0.58f, 0.92f);
-        public static readonly Color SkyHorizon = new Color(0.68f, 0.86f, 0.98f);
-        public static readonly Color CloudWhite = new Color(0.96f, 0.98f, 1.00f);
-        public static readonly Color CloudShadow = new Color(0.78f, 0.84f, 0.94f);
+        public static readonly Color SkyZenith = new Color(0.08f, 0.10f, 0.21f);
+        public static readonly Color SkyHorizon = new Color(0.18f, 0.20f, 0.34f);
+        public static readonly Color CloudWhite = new Color(0.66f, 0.62f, 0.78f);
+        public static readonly Color CloudShadow = new Color(0.29f, 0.31f, 0.48f);
 
         // UI banner panels — deep purple/blue, like CR's menu chrome.
         public static readonly Color PanelDeep = new Color(0.16f, 0.14f, 0.32f);

@@ -15,12 +15,12 @@ Shader "QuizBattle/Toon"
 
         _RimColor("Rim Color", Color) = (1, 1, 1, 1)
         _RimPower("Rim Power", Range(0.5, 8)) = 3
-        _RimIntensity("Rim Intensity", Range(0, 4)) = 0.6
+        _RimIntensity("Rim Intensity", Range(0, 4)) = 0.35
         _RimThreshold("Rim Threshold", Range(0, 1)) = 0.45
 
         _SpecTint("Specular Color", Color) = (1, 1, 1, 1)
         _Gloss("Glossiness", Range(4, 256)) = 40
-        _SpecIntensity("Specular Intensity", Range(0, 2)) = 0.25
+        _SpecIntensity("Specular Intensity", Range(0, 2)) = 0.18
 
         _EmissionColor("Emission Color", Color) = (0, 0, 0, 1)
         _EmissionIntensity("Emission Intensity", Range(0, 10)) = 0
@@ -101,8 +101,9 @@ Shader "QuizBattle/Toon"
                 float4 positionCS = TransformWorldToHClip(positionWS);
                 // Extrude in clip space, scaled by w, so the outline is a constant
                 // screen-space width regardless of distance or non-uniform object scale.
-                float3 normalCS = TransformWorldToHClipDir(normalWS, true);
-                positionCS.xy += normalCS.xy * _OutlineWidth * 0.006 * positionCS.w;
+                float2 normalSS = TransformWorldToHClipDir(normalWS).xy * _ScaledScreenParams.xy;
+                normalSS /= max(length(normalSS), 0.00001);
+                positionCS.xy += normalSS * _OutlineWidth * (2.0 / _ScaledScreenParams.xy) * positionCS.w;
                 output.positionCS = positionCS;
             #else
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);

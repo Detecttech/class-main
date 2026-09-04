@@ -11,10 +11,10 @@ using UnityEngine;
 
 namespace QuizBattle.GameState
 {
-    /// Drives a local, no-networking "mock match" end to end using MockEngine — validates
-    /// the race-to-the-goal/elimination win conditions and independent-per-player question
-    /// flow before any server is involved. Auto-play only for now (dummy players answer
-    /// with a biased coin flip); a human-controlled path arrives once this loop is proven out.
+/// Drives a local, no-networking "mock match" end to end using MockEngine — validates
+/// the race-to-the-goal/elimination win conditions and independent-per-player question
+/// flow before any server is involved. Auto-play only for now (dummy players answer
+/// with a biased coin flip); a human-controlled path arrives once this loop is proven out.
     public class GameManager : MonoBehaviour
     {
         private GridController _grid;
@@ -137,6 +137,7 @@ namespace QuizBattle.GameState
                 {
                     if (_tokens.TryGetValue(player.playerId, out var attackerToken) && _tokens.TryGetValue(target.playerId, out var targetToken))
                     {
+                        attackerToken.AttackToward(targetToken.transform.position);
                         AbilityVfxPlayer.Play(atk.outcome.vfxTag, attackerToken.transform.position, targetToken.transform.position, !target.alive);
                         FloatingCombatText.Spawn(targetToken.transform.position + Vector3.up * 1.5f, $"-{atk.outcome.damage} HP", QuizBattlePalette.RoofTilesRed, 1.25f);
                     }
@@ -156,6 +157,7 @@ namespace QuizBattle.GameState
                 {
                     if (_tokens.TryGetValue(player.playerId, out var casterToken) && _tokens.TryGetValue(target.playerId, out var targetToken))
                     {
+                        casterToken.AttackToward(targetToken.transform.position);
                         AbilityVfxPlayer.Play("vfx_freeze", casterToken.transform.position, targetToken.transform.position, eliminated: false);
                         FloatingCombatText.Spawn(targetToken.transform.position + Vector3.up * 1.5f, "FROZEN!", QuizBattlePalette.WaterBlue, 1.15f);
                     }
@@ -182,7 +184,7 @@ namespace QuizBattle.GameState
                 if (!_tokens.TryGetValue(player.playerId, out var token)) continue;
                 token.MoveTo(_grid.TileToWorldPos(player.pos.x, player.pos.y));
                 token.SetHp(player.hp, player.maxHp);
-                if (player.consecutiveCorrect >= 2) token.SetStreak(player.consecutiveCorrect);
+                token.SetStreak(player.consecutiveCorrect);
                 if (!player.alive) token.SetEliminated();
                 token.SetFrozen(player.frozen);
             }

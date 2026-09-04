@@ -114,7 +114,9 @@ public static class ArenaDemoRunner
         spawned.AddRange(AbilityVfxPlayer.Play("vfx_basic_strike", grid.TileToWorldPos(6, 1), grid.TileToWorldPos(6, 1), eliminated: true));
         spawned.AddRange(AbilityVfxPlayer.Play("vfx_freeze", grid.TileToWorldPos(1, 3), grid.TileToWorldPos(3, 3), eliminated: false));
 
-        AbilityVfxPlayer.SimulateAll(spawned, 0.15f);
+        AbilityVfxPlayer.SimulateAll(spawned, 0.2f);
+        CaptureScreenshot("vfx-showcase-travel.png");
+        AbilityVfxPlayer.SimulateAll(spawned, 0.48f);
 
         FloatingCombatText.Spawn(grid.TileToWorldPos(2, 2) + Vector3.up * 1.5f, "-25 HP CRIT!", QuizBattlePalette.RoofTilesRed, 1.3f);
         FloatingCombatText.Spawn(grid.TileToWorldPos(4, 1) + Vector3.up * 1.5f, "SHIELDED!", QuizBattlePalette.GoldTrim, 1.1f);
@@ -122,6 +124,8 @@ public static class ArenaDemoRunner
 
         Debug.Log($"[ArenaDemoRunner:vfx-showcase] spawned {spawned.Count} particle systems across 6 ability tags");
         CaptureScreenshot("vfx-showcase.png");
+        AbilityVfxPlayer.SimulateAll(spawned, 0.8f);
+        CaptureScreenshot("vfx-showcase-recovery.png");
         return true;
     }
 
@@ -180,7 +184,7 @@ public static class ArenaDemoRunner
         RenderTexture.active = null;
         Object.DestroyImmediate(rt);
 
-        var dir = "D:/temp";
+        var dir = Path.Combine(Application.dataPath, "..", "Builds", "VisualChecks");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, fileName);
         File.WriteAllBytes(path, tex.EncodeToPNG());

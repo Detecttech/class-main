@@ -3,8 +3,6 @@ using UnityEngine;
 
 namespace QuizBattle.Arena.Visuals
 {
-    /// Gentle idle motion for characters and token accents (Vera's rings, Blaze's embers, Zephyr's
-    /// orbit ring, cartoon breathing) — gives units the lively bounce of Clash Royale characters.
     public class TokenIdleAnimator : MonoBehaviour
     {
         private struct Accent
@@ -20,6 +18,7 @@ namespace QuizBattle.Arena.Visuals
         private Transform _bodyRoot;
         private Vector3 _bodyBaseScale = Vector3.one;
         private float _seed;
+        private float _elapsed;
         private bool _paused;
 
         private void Awake()
@@ -44,6 +43,7 @@ namespace QuizBattle.Arena.Visuals
 
         public void Register(Transform t, float bobSpeed = 1.2f, float bobAmount = 0.02f, float spinSpeed = 0f)
         {
+            if (t == null) return;
             _accents.Add(new Accent
             {
                 Transform = t,
@@ -56,12 +56,13 @@ namespace QuizBattle.Arena.Visuals
 
         private void Update()
         {
-            float t = Time.time + _seed;
+            if (_paused) return;
+            _elapsed += Time.deltaTime;
+            float t = _elapsed + _seed;
 
-            // Character body breathing & subtle idle sway
-            if (_bodyRoot != null && !_paused)
+            if (_bodyRoot != null)
             {
-                float breath = Mathf.Sin(t * 2.4f) * 0.035f;
+                float breath = Mathf.Sin(t * 2.1f) * 0.012f;
                 _bodyRoot.localScale = new Vector3(
                     _bodyBaseScale.x * (1f - breath * 0.5f),
                     _bodyBaseScale.y * (1f + breath),

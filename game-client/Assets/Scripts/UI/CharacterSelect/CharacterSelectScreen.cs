@@ -11,12 +11,12 @@ using UnityEngine.UI;
 
 namespace QuizBattle.UI.CharacterSelect
 {
-    /// Shows the 4 v1 characters as cards with a live 3D preview of their actual in-game
-    /// model (same CharacterVisualBuilder used in the arena — imported ithappy bodies,
-    /// tinted + accessorized per archetype); picking one sends select_character. Picks
-    /// aren't exclusive — multiple players can play as the same character (see
-    /// server/src/matchEngine/LiveMatchRegistry.ts selectCharacter) since lobbies can
-    /// have up to 8 players but only 4 characters exist.
+/// Shows the 4 v1 characters as cards with a live 3D preview of their actual in-game
+/// model (same CharacterVisualBuilder used in the arena — imported ithappy bodies,
+/// tinted + accessorized per archetype); picking one sends select_character. Picks
+/// aren't exclusive — multiple players can play as the same character (see
+/// server/src/matchEngine/LiveMatchRegistry.ts selectCharacter) since lobbies can
+/// have up to 8 players but only 4 characters exist.
     public class CharacterSelectScreen : MonoBehaviour
     {
         private const float CardWidth = 230f;
@@ -198,11 +198,11 @@ namespace QuizBattle.UI.CharacterSelect
             var cam = camObj.AddComponent<Camera>();
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.10f, 0.12f, 0.22f); // Deep Royal Navy
-            cam.fieldOfView = 25f;
+            cam.fieldOfView = 32f;
             cam.nearClipPlane = 0.05f;
             cam.targetTexture = target;
             cam.transform.position = stagePos + new Vector3(0f, 0.90f, -2.4f);
-            cam.transform.LookAt(stagePos + new Vector3(0f, 0.60f, 0f));
+            cam.transform.LookAt(stagePos + new Vector3(0f, 0.55f, 0f));
         }
 
         private Button BuildCharacterCard(Transform parent, CharacterDefinitionSO def, Vector2 anchor, RenderTexture preview)

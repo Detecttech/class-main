@@ -82,9 +82,9 @@ Shader "QuizBattle/GlowAdditive"
                 // use (HP bars, ground discs, ember/halo accents) regardless of speed.
                 half pulse = 1.0 - _PulseAmount * 0.5 * (1.0 + sin(_Time.y * _PulseSpeed));
 
-                half3 rgb = _TintColor.rgb * input.color.rgb * _Intensity * pulse;
+                half3 rgb = _TintColor.rgb * input.color.rgb * _Intensity;
                 half a = _TintColor.a * input.color.a * falloff * pulse;
-                return half4(rgb * a, a);
+                return half4(rgb, a);
             }
             ENDHLSL
         }

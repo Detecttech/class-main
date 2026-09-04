@@ -3,8 +3,8 @@ using UnityEngine;
 
 namespace QuizBattle.Arena
 {
-    /// Builds a colorful checkerboard grid from primitives at runtime — no prefab/material
-    /// assets required, so it works whether or not real art has been imported yet.
+/// Builds a colorful checkerboard grid from primitives at runtime — no prefab/material
+/// assets required, so it works whether or not real art has been imported yet.
     public class GridController : MonoBehaviour
     {
         public float tileSize = 1f;
@@ -64,8 +64,8 @@ namespace QuizBattle.Arena
             // seams don't read as busy compared to the chunkier character outlines.
             var tex = ResolveFloorTexture();
             renderer.sharedMaterial = tex != null
-                ? ToonMaterialFactory.Toon(color, TileStyle, tex, TileTiling)
-                : ToonMaterialFactory.Toon(color, TileStyle);
+                                      ? ToonMaterialFactory.Toon(color, TileStyle, tex, TileTiling)
+                                      : ToonMaterialFactory.Toon(color, TileStyle);
 
             return tile;
         }
@@ -95,11 +95,11 @@ namespace QuizBattle.Arena
             var glow = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             glow.name = $"ZoneGlow_{x}_{y}";
             glow.transform.SetParent(transform, false);
-            glow.transform.localPosition = new Vector3(x * tileSize, 0.52f, y * tileSize);
-            glow.transform.localScale = new Vector3(tileSize * 0.92f, 0.02f, tileSize * 0.92f);
+            glow.transform.localPosition = new Vector3(x * tileSize, 0.012f, y * tileSize);
+            glow.transform.localScale = new Vector3(tileSize * 0.75f, 0.005f, tileSize * 0.75f);
             Destroy(glow.GetComponent<Collider>());
             glow.GetComponent<Renderer>().sharedMaterial =
-                ToonMaterialFactory.Glow(zoneColor, intensity: 1.2f, softEdge: 0.35f, pulseSpeed: 2.5f, pulseAmount: 0.35f);
+                ToonMaterialFactory.Glow(zoneColor, intensity: 0.55f, softEdge: 0.5f, pulseSpeed: 1.5f, pulseAmount: 0.15f);
 
             // Goal Finish Posts on the left and right ends of the finish line
             if (isLeftEdge || isRightEdge)
@@ -112,8 +112,8 @@ namespace QuizBattle.Arena
         {
             var post = new GameObject(isLeft ? "GoalPost_Left" : "GoalPost_Right");
             post.transform.SetParent(transform, false);
-            float dir = isLeft ? -0.55f : 0.55f;
-            post.transform.localPosition = new Vector3(x * tileSize + dir * tileSize, 0.5f, y * tileSize);
+            float dir = isLeft ? -1f : 1f;
+            post.transform.localPosition = new Vector3(x * tileSize + dir * (tileSize * 0.5f + 0.35f), 0f, y * tileSize);
 
             var pillarMat = ToonMaterialFactory.Toon(QuizBattlePalette.StoneBorder, ToonStyle.Default);
             var goldMat = ToonMaterialFactory.Toon(QuizBattlePalette.GoldTrim, ToonStyle.Default);
@@ -159,7 +159,8 @@ namespace QuizBattle.Arena
             CreateCurbSegment(curbContainer.transform, new Vector3(cx - totalW * 0.5f - curbThick * 0.5f, 0.04f, cz), new Vector3(curbThick, curbH, totalH), curbMat);
 
             // 4 Golden corner studs
-            Vector3[] cornerStuds = {
+            Vector3[] cornerStuds =
+            {
                 new Vector3(cx - totalW * 0.5f - curbThick * 0.5f, 0.12f, cz - totalH * 0.5f - curbThick * 0.5f),
                 new Vector3(cx + totalW * 0.5f + curbThick * 0.5f, 0.12f, cz - totalH * 0.5f - curbThick * 0.5f),
                 new Vector3(cx - totalW * 0.5f - curbThick * 0.5f, 0.12f, cz + totalH * 0.5f + curbThick * 0.5f),
@@ -242,10 +243,10 @@ namespace QuizBattle.Arena
         }
 
         public Vector3 TileToWorldPos(int x, int y) =>
-            transform.TransformPoint(new Vector3(x * tileSize, 0.51f, y * tileSize));
+        transform.TransformPoint(new Vector3(x * tileSize, 0.01f, y * tileSize));
 
         public Vector3 GridCenter() =>
-            transform.TransformPoint(new Vector3((_width - 1) * tileSize / 2f, 0f, (_height - 1) * tileSize / 2f));
+        transform.TransformPoint(new Vector3((_width - 1) * tileSize / 2f, 0f, (_height - 1) * tileSize / 2f));
 
         public void ClearGrid()
         {

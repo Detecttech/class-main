@@ -9,10 +9,10 @@ using UnityEngine;
 
 namespace QuizBattle.Arena
 {
-    /// Renders a MatchStateStore (real server truth) using the same visual building
-    /// blocks as the Phase 1 local mock demo (GridController/CharacterToken/HudController).
-    /// This class only reacts to store events — it never calls into MockEngine or computes
-    /// outcomes itself, per the "renderer of server state" rule from the project plan.
+/// Renders a MatchStateStore (real server truth) using the same visual building
+/// blocks as the Phase 1 local mock demo (GridController/CharacterToken/HudController).
+/// This class only reacts to store events — it never calls into MockEngine or computes
+/// outcomes itself, per the "renderer of server state" rule from the project plan.
     public class NetworkedArenaView
     {
         private readonly GridController _grid;
@@ -21,6 +21,7 @@ namespace QuizBattle.Arena
         private readonly MatchStateStore _store;
         private readonly Dictionary<string, CharacterVisual> _characterVisuals;
         private readonly Dictionary<int, CharacterToken> _tokens = new Dictionary<int, CharacterToken>();
+        private readonly Dictionary<int, Vector2Int> _positions = new Dictionary<int, Vector2Int>();
 
         public NetworkedArenaView(GridController grid, HudController hud, ArenaRig rig, MatchStateStore store, Dictionary<string, CharacterVisual> characterVisuals)
         {
@@ -72,7 +73,10 @@ namespace QuizBattle.Arena
             _grid.BuildGrid(_store.GridWidth, _store.GridHeight, _store.GoalRow);
             PositionCamera(_store.GridWidth, _store.GridHeight);
 
+            foreach (var token in _tokens.Values)
+                if (token != null) Object.Destroy(token.gameObject);
             _tokens.Clear();
+            _positions.Clear();
             foreach (var p in _store.Players.Values)
             {
                 var visual = _characterVisuals.TryGetValue(p.characterId, out var v) ? v : CharacterVisual.Fallback(Color.gray);
@@ -80,7 +84,9 @@ namespace QuizBattle.Arena
                 token.SetHp(p.hp, p.maxHp);
                 if (p.streak >= 2) token.SetStreak(p.streak);
                 if (!p.alive) token.SetEliminated();
+                token.SetFrozen(p.frozen);
                 _tokens[p.playerId] = token;
+                _positions[p.playerId] = p.pos;
             }
         }
 
@@ -96,16 +102,19 @@ namespace QuizBattle.Arena
         {
             if (!_tokens.TryGetValue(a.PlayerId, out var token)) return;
 
-            token.MoveTo(_grid.TileToWorldPos(a.NewGridPos.X, a.NewGridPos.Y));
+            var position = new Vector2Int(a.NewGridPos.X, a.NewGridPos.Y);
+            bool advanced = _positions.TryGetValue(a.PlayerId, out var previous) && position.y > previous.y;
+            _positions[a.PlayerId] = position;
+            token.MoveTo(_grid.TileToWorldPos(position.x, position.y));
             token.SetHp(a.Hp, a.MaxHp);
-            if (a.Streak >= 2)
+            token.SetStreak(a.Streak);
+            if (advanced && a.Streak >= 2)
             {
-                token.SetStreak(a.Streak);
                 FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, $"STREAK x{a.Streak}!", QuizBattlePalette.FireGlow, 1.15f);
             }
-            else
+            else if (advanced)
             {
-                FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, "CORRECT!", QuizBattlePalette.GoldTrim, 1.0f);
+                FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, "ADVANCE!", QuizBattlePalette.GoldTrim, 1.0f);
             }
 
             if (!a.Alive) token.SetEliminated();
@@ -119,6 +128,7 @@ namespace QuizBattle.Arena
             if (_tokens.TryGetValue(a.TargetId, out var token))
             {
                 Vector3 from = _tokens.TryGetValue(a.AttackerId, out var attackerToken) ? attackerToken.transform.position : token.transform.position;
+                if (attackerToken != null) attackerToken.AttackToward(token.transform.position);
                 AbilityVfxPlayer.Play(a.VfxTag, from, token.transform.position, a.Eliminated);
 
                 token.SetHp(a.TargetHpAfter, _store.Players.TryGetValue(a.TargetId, out var p) ? p.maxHp : a.TargetHpAfter);
@@ -133,6 +143,7 @@ namespace QuizBattle.Arena
             if (_tokens.TryGetValue(f.TargetId, out var token))
             {
                 Vector3 from = _tokens.TryGetValue(f.CasterId, out var casterToken) ? casterToken.transform.position : token.transform.position;
+                if (casterToken != null) casterToken.AttackToward(token.transform.position);
                 AbilityVfxPlayer.Play("vfx_freeze", from, token.transform.position, eliminated: false);
                 token.SetFrozen(true);
                 FloatingCombatText.Spawn(token.transform.position + Vector3.up * 1.5f, "FROZEN!", QuizBattlePalette.WaterBlue, 1.15f);
